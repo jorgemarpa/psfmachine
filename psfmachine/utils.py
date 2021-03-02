@@ -154,7 +154,9 @@ WHERE phot_g_mean_mag<={magnitude_limit}
 def _make_A(phi, r, cut_r=5):
     """ Make spline design matrix in polar coordinates """
     phi_spline = sparse.csr_matrix(wrapped_spline(phi, order=3, nknots=10).T)
-    r_knots = np.linspace(0.25 ** 0.5, 5 ** 0.5, 8) ** 2
+    r_knots = (
+        np.linspace(np.percentile(r, 5) ** 0.5, np.percentile(r, 95) ** 0.5, 8) ** 2
+    )
     r_spline = sparse.csr_matrix(
         np.asarray(
             dmatrix(
@@ -176,10 +178,10 @@ def _make_A(phi, r, cut_r=5):
     return X1
 
 
-def make_A_edges(r, f, type="cuadratic"):
+def _make_A_edges(r, f, type="quadratic"):
     if type == "linear":
         A = np.vstack([r ** 0, r, f]).T
-    elif type == "cuadratic":
+    elif type == "quadratic":
         A = np.vstack([r ** 0, r, r ** 2, f]).T
     elif type == "cubic":
         A = np.vstack([r ** 0, r, r ** 2, r ** 3, f]).T
