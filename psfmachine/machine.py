@@ -388,7 +388,7 @@ class Machine(object):
         following computation, especially for large number of sources and pixels.
         """
         self.radius = self._find_psf_edge(
-            radius_limit=(5 * 4), cut=300, plot=False, dm_type="cuadratic"
+            radius_limit=(5 * 4), cut=300, plot=False, dm_type="quadratic"
         )
         self.source_mask = sparse.csr_matrix(
             self.r.to("arcsec").value < self.radius[:, None]
@@ -737,7 +737,7 @@ class Machine(object):
             # print("Computing PSF edges...")
             self.radius_pix = (
                 self._find_psf_edge(
-                    radius_limit=(5 * 4), cut=cut, plot=plot, dm_type="cuadratic"
+                    radius_limit=(5 * 4), cut=cut, plot=plot, dm_type="quadratic"
                 )
                 / 4
             )
@@ -917,15 +917,10 @@ class Machine(object):
         crowd = np.array(crowd)
         median_complet = np.nanmedian(complet, axis=1)
         median_crowd = np.nanmedian(crowd, axis=1)
-        print(median_complet)
-        print(median_crowd)
 
         try:
             compl_above = median_complet >= 0.98
-            if len(np.unique(median_crowd[compl_above])) == 1:
-                optim_cut = cuts[compl_above][0]
-            else:
-                optim_cut = cuts[compl_above][-1]
+            optim_cut = cuts[np.argmax(median_crowd[compl_above])]
         except IndexError:
             optim_cut = cuts[np.argmax(median_complet)]
             if not np.isfinite(optim_cut):
