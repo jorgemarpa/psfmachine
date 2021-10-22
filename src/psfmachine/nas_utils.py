@@ -12,7 +12,7 @@ def query_local_db(ras, decs, rads, magnitude_limit=18):
     internet connection, e.g. when running at NAS because computing nodes do not have
     internet access.
     """
-    print("Using local table")
+    # log.info("Using local table")
     if socket.gethostname() != "NASAs-MacBook-Pro.local":
         path = "/nobackup/jimartin/ADAP/data/catalogs"
     else:
