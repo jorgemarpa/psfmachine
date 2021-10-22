@@ -10,7 +10,7 @@ from patsy import dmatrix
 import pyia
 
 
-# @functools.lru_cache()
+@functools.lru_cache()
 def get_gaia_sources(ras, decs, rads, magnitude_limit=18, epoch=2020, dr=2):
     """
     Will find gaia sources using a TAP query, accounting for proper motions.
@@ -58,7 +58,7 @@ def get_gaia_sources(ras, decs, rads, magnitude_limit=18, epoch=2020, dr=2):
         internet = False
         # print("No internet connection")
 
-    if False:
+    if internet:
         if dr == 2:
             # CH: We don't need a lot of these columns we could greatly reduce it
             gd = pyia.GaiaData.from_query(
