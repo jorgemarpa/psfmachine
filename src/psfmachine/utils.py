@@ -3,13 +3,14 @@
 import numpy as np
 import pandas as pd
 import functools
+import requests
 
 from scipy import sparse
 from patsy import dmatrix
 import pyia
 
 
-@functools.lru_cache()
+# @functools.lru_cache()
 def get_gaia_sources(ras, decs, rads, magnitude_limit=18, epoch=2020, dr=2):
     """
     Will find gaia sources using a TAP query, accounting for proper motions.
@@ -49,45 +50,58 @@ def get_gaia_sources(ras, decs, rads, magnitude_limit=18, epoch=2020, dr=2):
     ]
 
     where = """\n\tOR """.join(wheres)
-    if dr == 2:
-        # CH: We don't need a lot of these columns we could greatly reduce it
-        gd = pyia.GaiaData.from_query(
-            f"""SELECT designation,
-            coord1(prop) AS ra, coord2(prop) AS dec, parallax,
-            parallax_error, pmra, pmdec,
-            phot_g_mean_flux,
-            phot_g_mean_mag,
-            phot_bp_mean_mag,
-            phot_rp_mean_mag FROM (
-     SELECT *,
-     EPOCH_PROP_POS(ra, dec, parallax, pmra, pmdec, 0, ref_epoch, {epoch}) AS prop
-     FROM gaiadr2.gaia_source
-     WHERE {where}
-    )  AS subquery
-    WHERE phot_g_mean_mag<={magnitude_limit}
 
-    """
-        )
-    elif dr == 3:
-        gd = pyia.GaiaData.from_query(
-            f"""SELECT designation,
-            coord1(prop) AS ra, coord2(prop) AS dec, parallax,
-            parallax_error, pmra, pmdec,
-            phot_g_mean_flux,
-            phot_g_mean_mag,
-            phot_bp_mean_mag,
-            phot_rp_mean_mag FROM (
-             SELECT *,
-             EPOCH_PROP_POS(ra, dec, parallax, pmra, pmdec, 0, ref_epoch, {epoch}) AS prop
-             FROM gaiaedr3.gaia_source
-             WHERE {where}
-            )  AS subquery
-            WHERE phot_g_mean_mag<={magnitude_limit}
-            """
-        )
+    internet = True
+    try:
+        request = requests.get("https://gea.esac.esa.int/archive/", timeout=5)
+    except (requests.ConnectionError, requests.Timeout) as e:
+        internet = False
+        print("No internet connection")
+
+    if False:
+        if dr == 2:
+            # CH: We don't need a lot of these columns we could greatly reduce it
+            gd = pyia.GaiaData.from_query(
+                f"""SELECT designation,
+                coord1(prop) AS ra, coord2(prop) AS dec, parallax,
+                parallax_error, pmra, pmdec,
+                phot_g_mean_flux,
+                phot_g_mean_mag,
+                phot_bp_mean_mag,
+                phot_rp_mean_mag FROM (
+         SELECT *,
+         EPOCH_PROP_POS(ra, dec, parallax, pmra, pmdec, 0, ref_epoch, {epoch}) AS prop
+         FROM gaiadr2.gaia_source
+         WHERE {where}
+        )  AS subquery
+        WHERE phot_g_mean_mag<={magnitude_limit}
+
+        """
+            )
+        elif dr == 3:
+            gd = pyia.GaiaData.from_query(
+                f"""SELECT designation,
+                coord1(prop) AS ra, coord2(prop) AS dec, parallax,
+                parallax_error, pmra, pmdec,
+                phot_g_mean_flux,
+                phot_g_mean_mag,
+                phot_bp_mean_mag,
+                phot_rp_mean_mag FROM (
+                 SELECT *,
+                 EPOCH_PROP_POS(ra, dec, parallax, pmra, pmdec, 0, ref_epoch, {epoch}) AS prop
+                 FROM gaiaedr3.gaia_source
+                 WHERE {where}
+                )  AS subquery
+                WHERE phot_g_mean_mag<={magnitude_limit}
+                """
+            )
+        else:
+            raise ValueError("Please pass a valid data release")
+        return gd.data.to_pandas()
     else:
-        raise ValueError("Please pass a valid data release")
-    return gd.data.to_pandas()
+        from .nas_utils import query_local_db
+
+        return query_local_db(ras, decs, rads, magnitude_limit=magnitude_limit)
 
 
 def do_tiled_query(ra, dec, ngrid=(5, 5), magnitude_limit=18, epoch=2020, dr=3):
