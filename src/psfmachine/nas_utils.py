@@ -47,5 +47,6 @@ def query_local_db(ras, decs, rads, magnitude_limit=18):
     return (
         pd.concat(results, axis=0)
         .drop_duplicates(subset=["designation"])
+        .sort_values("designation")
         .reset_index(drop=True)
     )
