@@ -21,8 +21,8 @@ def query_local_db(ras, decs, rads, magnitude_limit=18):
         path = "/Users/jorgemarpa/Work/BAERI/ADAP/data/catalogs"
 
     # open table
-    # table = Table.read(f"{path}/kic_x_gaia_edr3_kepler_field.fits").to_pandas()
-    table = pd.read_csv(f"{path}/kic_x_gaia_edr3_kepler_field_bkgd.csv", index_col=0)
+    table = Table.read(f"{path}/kic_x_gaia_edr3_kepler_field.fits").to_pandas()
+    # table = pd.read_csv(f"{path}/kic_x_gaia_edr3_kepler_field_bkgd.csv", index_col=0)
 
     # filter sources around TPFs, square approx
     ralim = [np.min(ras) - 0.1, np.max(ras) + 0.1]
@@ -33,7 +33,7 @@ def query_local_db(ras, decs, rads, magnitude_limit=18):
         f"phot_g_mean_mag <= {magnitude_limit}"
     )
     # clean table
-    # table.loc[:, "designation"] = table["designation"].str.decode("utf-8")
+    table.loc[:, "designation"] = table["designation"].str.decode("utf-8")
     table.loc[:, "kic"] = table["kic"].fillna(0)
     catalog = SkyCoord(
         ra=table["ra"], dec=table["dec"], frame="icrs", unit=(u.deg, u.deg)
