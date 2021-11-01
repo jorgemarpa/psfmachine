@@ -22,7 +22,7 @@ def query_local_db(ras, decs, rads, magnitude_limit=18):
 
     # open table
     table = Table.read(f"{path}/kic_x_gaia_edr3_kepler_field.fits").to_pandas()
-    # table = pd.read_csv(f"{path}/kic_x_gaia_edr3_kepler_field_bkgd.csv", index_col=0)
+    # table = Table.read(f"{path}/kic_x_gaia_edr3_kepler_field_bkgd.fits").to_pandas()
 
     # filter sources around TPFs, square approx
     ralim = [np.min(ras) - 0.1, np.max(ras) + 0.1]
@@ -44,6 +44,7 @@ def query_local_db(ras, decs, rads, magnitude_limit=18):
         c = SkyCoord(ra=[ra], dec=[dec], frame="icrs", unit=(u.deg, u.deg))
         idxc, idxcatalog, d2d, _ = catalog.search_around_sky(c, rad * u.deg)
         results.append(table.iloc[idxcatalog])
+    del table
 
     return (
         pd.concat(results, axis=0)
