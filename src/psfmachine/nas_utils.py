@@ -21,7 +21,10 @@ def query_local_db(ras, decs, rads, magnitude_limit=18):
         path = "/Users/jorgemarpa/Work/BAERI/ADAP/data/catalogs"
 
     # open table
-    table = Table.read(f"{path}/kic_x_gaia_edr3_kepler_field.fits").to_pandas()
+    if magnitude_limit == 18:
+        table = Table.read(f"{path}/kic_x_gaia_edr3_kepler_field_g18.fits").to_pandas()
+    else:
+        table = Table.read(f"{path}/kic_x_gaia_edr3_kepler_field.fits").to_pandas()
     # table = Table.read(f"{path}/kic_x_gaia_edr3_kepler_field_bkgd.fits").to_pandas()
 
     # filter sources around TPFs, square approx
