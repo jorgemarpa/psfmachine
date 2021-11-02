@@ -13,7 +13,7 @@ import pyia
 
 
 # @profile
-@functools.lru_cache()
+# @functools.lru_cache()
 def get_gaia_sources(ras, decs, rads, magnitude_limit=18, epoch=2020, dr=2):
     """
     Will find gaia sources using a TAP query, accounting for proper motions.
