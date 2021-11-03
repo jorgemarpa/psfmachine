@@ -4,8 +4,11 @@ nav:
     - Machine: machine.md
     - TPFMachine : tpf.md
     - FFIMachine : ffi.md
+    - Aperture Photometry : aperture.md
 theme:
   name: "material"
+  icon:
+      logo: material/star-plus
 repo_url: https://github.com/SSDataLab/psfmachine
 plugins:
   - search
