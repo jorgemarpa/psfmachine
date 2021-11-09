@@ -210,6 +210,7 @@ def _make_A_polar(phi, r, cut_r=6, rmin=1, rmax=18, n_r_knots=12, n_phi_knots=15
 
 
 def _make_A_cartesian(x, y, n_knots=10, radius=3.0, spacing="sqrt"):
+    radius = np.minimum(radius, np.min([-x.min(), x.max(), -y.min(), y.max()])) - 1e-3
     if spacing == "sqrt":
         x_knots = np.linspace(-np.sqrt(radius), np.sqrt(radius), n_knots)
         x_knots = np.sign(x_knots) * x_knots ** 2
