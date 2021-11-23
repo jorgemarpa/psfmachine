@@ -1311,7 +1311,7 @@ class Machine(object):
 
         return fig
 
-    def fit_model(self, fit_va=False):
+    def fit_model(self, fit_va=False, prior_sigma=None):
         """
         Finds the best fitting weights for every source, simultaneously
 
@@ -1321,12 +1321,17 @@ class Machine(object):
             Fitting model accounting for velocity aberration. If `True`, then a time
             model has to be built previously with `build_time_model`.
         """
-        prior_mu = self.source_flux_estimates  # np.zeros(A.shape[1])
-        prior_sigma = (
-            np.ones(self.mean_model.shape[0])
-            * 5
-            * np.abs(self.source_flux_estimates) ** 0.5
-        )
+        if hasattr(self, "sap_flux"):
+            prior_mu = np.nanmean(self.sap_flux, axis=0)
+        else:
+            prior_mu = self.source_flux_estimates  # np.zeros(A.shape[1])
+
+        if prior_sigma is None:
+            prior_sigma = (
+                np.ones(self.mean_model.shape[0])
+                * 5
+                * np.abs(self.source_flux_estimates) ** 0.5
+            )
 
         self.model_flux = np.zeros(self.flux.shape) * np.nan
 

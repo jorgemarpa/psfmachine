@@ -151,23 +151,42 @@ class TPFMachine(Machine):
             self.load_shape_model(input=shape_model_file, plot=plot)
         else:
             self.build_shape_model(plot=plot)
-        self.build_time_model(plot=plot)
-        self.fit_model(fit_va=fit_va)
-        if iter_negative:
-            # More than 2% negative cadences
-            negative_sources = (self.ws_va < 0).sum(axis=0) > (0.02 * self.nt)
-            idx = 1
-            while len(negative_sources) > 0:
-                self.mean_model[negative_sources] *= 0
-                self.fit_model(fit_va=fit_va)
-                negative_sources = np.where((self.ws_va < 0).all(axis=0))[0]
-                idx += 1
-                if idx >= 3:
-                    break
+
         if sap:
             self.compute_aperture_photometry(
                 aperture_size="optimal", target_complete=1, target_crowd=1
             )
+        self.build_time_model(plot=plot)
+        self.fit_model(fit_va=fit_va)
+
+        # if iter_negative:
+        #     # More than 2% negative cadences
+        #     negative_sources = (self.ws_va < 0).sum(axis=0) > (0.02 * self.nt)
+        #     idx = 1
+        #     while len(negative_sources) > 0:
+        #         self.mean_model[negative_sources] *= 0
+        #         self.fit_model(fit_va=fit_va)
+        #         negative_sources = np.where((self.ws_va < 0).all(axis=0))[0]
+        #         idx += 1
+        #         if idx >= 3:
+        #             break
+
+        if iter_negative:
+            count = 1
+            negative_sources = (self.ws_va < 0).sum(axis=0) > (0.02 * self.nt)
+            prior_sigma = (
+                np.ones(self.mean_model.shape[0])
+                * 5
+                * np.abs(self.source_flux_estimates) ** 0.5
+            )
+            while len(negative_sources) > 0:
+                prior_sigma[negative_sources] /= 2
+                print(np.where(negative_sources), prior_sigma[negative_sources])
+                self.fit_model(fit_va=fit_va, prior_sigma=prior_sigma)
+                negative_sources = np.where((self.ws_va < 0).all(axis=0))[0]
+                count += 1
+                if count >= 3:
+                    break
 
         self.lcs = []
         for idx, s in self.sources.iterrows():
