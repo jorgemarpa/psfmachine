@@ -2,18 +2,19 @@
 
 import numpy as np
 import pandas as pd
-import functools
+import diskcache
 import requests
-
-# from memory_profiler import profile
 
 from scipy import sparse
 from patsy import dmatrix
 import pyia
 
+# size_limit is 1GB
+cache = diskcache.Cache(directory="~/.psfmachine-cache")
 
-# @profile
-# @functools.lru_cache()
+
+# cache during 30 days
+@cache.memoize(expire=2.592e06)
 def get_gaia_sources(ras, decs, rads, magnitude_limit=18, epoch=2020, dr=2):
     """
     Will find gaia sources using a TAP query, accounting for proper motions.
@@ -47,8 +48,8 @@ def get_gaia_sources(ras, decs, rads, magnitude_limit=18, epoch=2020, dr=2):
         rads = [rads]
     wheres = [
         f"""1=CONTAINS(
-                  POINT('ICRS',ra,dec),
-                  CIRCLE('ICRS',{ra},{dec},{rad}))"""
+                  POINT('ICRS',{ra},{dec}),
+                  CIRCLE('ICRS',ra,dec,{rad}))"""
         for ra, dec, rad in zip(ras, decs, rads)
     ]
 
@@ -414,3 +415,46 @@ def sparse_lessthan(arr, limit):
         shape=arr.shape,
     ).astype(bool)
     return masked_arr
+
+
+def _combine_A(A, poscorr=None, time=None):
+    """
+    Combines a design matrix A (cartesian) with a time corrector type.
+    If poscorr is provided, A will be combined with both axis of the pos corr as a
+    1st degree polynomial.
+    If time is provided, A will be combined with the time values as a 3rd degree
+    polynomialin time.
+
+    Parameters
+    ----------
+    A : sparse.csr_matrix
+        A sparse design matix in of cartesian coordinates created with _make_A_cartesian
+    poscorr : list
+        A list of pos_corr arrays for axis 1 and 2
+    time : numpy.array
+        An array with time values
+    """
+    if poscorr:
+        # Cartesian spline with poscor dependence
+        A2 = sparse.hstack(
+            [
+                A,
+                A.multiply(poscorr[0].ravel()[:, None]),
+                A.multiply(poscorr[1].ravel()[:, None]),
+                A.multiply((poscorr[0] * poscorr[1]).ravel()[:, None]),
+            ],
+            format="csr",
+        )
+        return A2
+    elif time:
+        # Cartesian spline with time dependence
+        A2 = sparse.hstack(
+            [
+                A,
+                A.multiply(time.ravel()[:, None]),
+                A.multiply(time.ravel()[:, None] ** 2),
+                A.multiply(time.ravel()[:, None] ** 3),
+            ],
+            format="csr",
+        )
+        return A2

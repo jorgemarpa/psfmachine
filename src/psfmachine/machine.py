@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 from scipy import sparse
 from scipy.ndimage import gaussian_filter1d
-from scipy import optimize
 import astropy.units as u
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -16,6 +15,7 @@ from .utils import (
     _make_A_cartesian,
     solve_linear_model,
     sparse_lessthan,
+    _combine_A,
 )
 from .aperture import optimize_aperture, compute_FLFRCSAP, compute_CROWDSAP
 
@@ -130,6 +130,16 @@ class Machine(object):
             build the PSF model
         mean_model: scipy.sparce.csr_matrix
             Mean PSF model values per pixel used for PSF photometry
+        time_corrector: string
+            The type of time corrector that will be used to build the time model,
+            default is a "polynomial" for a polynomial in time, it can also be "pos_corr"
+        poscorr_filter_size: int
+            Standard deviation for Gaussian kernel to be used to smooth the pos_corrs
+        cartesian_knot_spacing: string
+            Defines the type of spacing between knots in cartessian space to generate
+            the design matrix, options are "linear" or "sqrt".
+        quiet: booleans
+            Quiets TQDM progress bars.
         """
 
         if not isinstance(sources, pd.DataFrame):
@@ -155,7 +165,11 @@ class Machine(object):
         self.rmax = rmax
         self.cut_r = cut_r
         self.sparse_dist_lim = sparse_dist_lim * u.arcsecond
-        self.use_poscorr = False
+        self.time_corrector = "polynomial"
+        # if pos_corr, then we can smooth the vector with a Gaussian kernel of size
+        # poscorr_filter_size, if this is < 0.5 -> no smoothing, default is 12
+        # beacause of 6hr-CDPP
+        self.poscorr_filter_size = 12
         self.cartesian_knot_spacing = "sqrt"
         # disble tqdm prgress bar when running in HPC
         self.quiet = False
@@ -604,7 +618,8 @@ class Machine(object):
         return
 
     def _time_bin(self, npoints=200):
-        """Bin the flux data down in time
+        """Bin the flux data down in time. If using `pos_corr`s as corrector, it will
+        return also the binned and smooth versions of the pos_coors vectors.
 
         Parameters
         ----------
@@ -621,8 +636,12 @@ class Machine(object):
             The binned flux, raw
         flux_binned: np.ndarray
             The binned flux, whitened by the mean of the flux in time
-        flux_err_binned:
+        flux_err_binned:: np.ndarray
             The binned flux error, whitened by the mean of the flux
+        pc1_smooth and pc2_smooth: np.ndarray
+            Smooth version of the median poscorr vectors 1 and 2 used for time correction.
+        pc1_bin and pc2_bin: np.ndarray
+            Binned version of poscorrs vectors 1 and 2 used for setting knots.
         """
 
         # Where there are break points in the time array
@@ -630,7 +649,7 @@ class Machine(object):
             np.append(0, np.where(np.diff(self.time) > 0.1)[0] + 1), len(self.time)
         )
         # if using poscorr, find and add discontinuity in poscorr data
-        if hasattr(self, "pos_corr1") and self.use_poscorr:
+        if hasattr(self, "pos_corr1") and self.time_corrector == "pos_corr":
             # take the scene-median poscorr
             mpc1 = np.nanmedian(self.pos_corr1, axis=0)
             mpc2 = np.nanmedian(self.pos_corr2, axis=0)
@@ -638,22 +657,25 @@ class Machine(object):
             # find poscorr discontinuity in each axis
             grads1 = np.gradient(mpc1, self.time)
             grads2 = np.gradient(mpc2, self.time)
+            # the 7-sigma here is hardcoded and found to work ok
             splits1 = np.where(grads1 > 7 * grads1.std())[0]
             splits2 = np.where(grads2 > 7 * grads2.std())[0]
             # merging breaks
             splits = np.unique(np.concatenate([splits, splits1[1::2], splits2[1::2]]))
             del grads1, grads2, splits1, splits2
 
-        splits_a = splits[:-1] + 100
+        # the adition is to set the first knot after breaks @ 1% of the sequence lenght
+        splits_a = splits[:-1] + int(self.nt * 0.01)
         splits_b = splits[1:]
         dsplits = (splits_b - splits_a) // npoints
-        # breake has the bin centers
-        # first break is at cadance 50
-        breaks = [50]
+        # this isteration is to avoid knots right at poscorr/time discontinuity by
+        # iterating over segments between splits and creating evenly spaced knots
+        # within them
+        breaks = []
         for spdx in range(len(splits_a)):
-            breaks.append(splits_a[spdx] + np.arange(0, dsplits[spdx] - 1) * npoints)
-        # we include 50-to-last cadecence
-        breaks.append(splits[-1] - 50)
+            breaks.append(splits_a[spdx] + np.arange(0, dsplits[spdx]) * npoints)
+        # we include the last cadance as 99% of the sequence lenght
+        breaks.append(int(self.nt * 0.99))
         breaks = np.hstack(breaks)
         # breaks = np.unique(np.hstack([breaks, splits[1:-1]]))
 
@@ -706,21 +728,31 @@ class Machine(object):
         tm = ((tm - tm.mean()) / (tm.max() - tm.mean()))[:, None] * np.ones(fm.shape)
 
         # poscor
-        if hasattr(self, "pos_corr1") and self.use_poscorr:
+        if hasattr(self, "pos_corr1") and self.time_corrector == "pos_corr":
             # we smooth the poscorr with a Gaussian kernel and 12 cadence window
             # (6hr-CDPP) to not introduce too much noise, the smoothing is aware
             # of focus-change breaks
             pc1_smooth = []
             pc2_smooth = []
+            # if poscorr_filter_size == 0 then the smoothing will fail. we take care of
+            # it by setting every value < .5 to 0.1 which leads to no smoothing
+            # (residuals < 1e-4)
+            self.poscorr_filter_size = (
+                0.1 if self.poscorr_filter_size < 0.5 else self.poscorr_filter_size
+            )
             for i in range(1, len(splits)):
                 pc1_smooth.extend(
                     gaussian_filter1d(
-                        mpc1[splits[i - 1] : splits[i]], 12, mode="mirror"
+                        mpc1[splits[i - 1] : splits[i]],
+                        self.poscorr_filter_size,
+                        mode="mirror",
                     )
                 )
                 pc2_smooth.extend(
                     gaussian_filter1d(
-                        mpc2[splits[i - 1] : splits[i]], 12, mode="mirror"
+                        mpc2[splits[i - 1] : splits[i]],
+                        self.poscorr_filter_size,
+                        mode="mirror",
                     )
                 )
             pc1_smooth = np.array(pc1_smooth)
@@ -751,7 +783,12 @@ class Machine(object):
     def build_time_model(self, plot=False):
         """
         Builds a time model that moves the PRF model to account for the scene movement
-        due to velocity aberration.
+        due to velocity aberration. It has two methods to choose from using the
+        attribute `self.time_corrector`, if `"polynomial"` (default) will use a
+        polynomial in time, if `"pos_corr"` will use the pos_corr vectos that can be found
+        in the TPFs. The time polynomial gives a more flexible model vs the pos_corr
+        option, but can lead to light curves with "weird" long-term trends. Using
+        pos_corr is recomended for Kepler data.
 
         Parameters
         ----------
@@ -760,7 +797,7 @@ class Machine(object):
         **kwargs
             Keyword arguments to be passed to `_get_source_mask()`
         """
-        if hasattr(self, "pos_corr1") and self.use_poscorr:
+        if hasattr(self, "pos_corr1") and self.time_corrector == "pos_corr":
             (
                 time_original,
                 time_binned,
@@ -801,28 +838,12 @@ class Machine(object):
         )
         A2 = sparse.vstack([A_c] * time_binned.shape[0], format="csr")
         # Cartesian spline with time dependence
-        if hasattr(self, "pos_corr1") and self.use_poscorr:
+        if hasattr(self, "pos_corr1") and self.time_corrector == "pos_corr":
             # Cartesian spline with poscor dependence
-            A3 = sparse.hstack(
-                [
-                    A2,
-                    A2.multiply(poscorr1_binned.ravel()[:, None]),
-                    A2.multiply(poscorr2_binned.ravel()[:, None]),
-                    A2.multiply((poscorr1_binned * poscorr2_binned).ravel()[:, None]),
-                ],
-                format="csr",
-            )
+            A3 = _combine_A(A2, poscorr=[poscorr1_binned, poscorr2_binned])
         else:
             # Cartesian spline with time dependence
-            A3 = sparse.hstack(
-                [
-                    A2,
-                    A2.multiply(time_binned.ravel()[:, None]),
-                    A2.multiply(time_binned.ravel()[:, None] ** 2),
-                    A2.multiply(time_binned.ravel()[:, None] ** 3),
-                ],
-                format="csr",
-            )
+            A3 = _combine_A(A2, time=time_binned)
 
         # No saturated pixels
         k = (
@@ -879,7 +900,7 @@ class Machine(object):
         fig : matplotlib.Figure
             Figure.
         """
-        if hasattr(self, "pos_corr1") and self.use_poscorr:
+        if hasattr(self, "pos_corr1") and self.time_corrector == "pos_corr":
             (
                 time_original,
                 time_binned,
@@ -912,34 +933,18 @@ class Machine(object):
             dx,
             dy,
             n_knots=self.n_time_knots,
-            radius=8,
+            radius=self.time_radius,
             spacing=self.cartesian_knot_spacing,
         )
         A2 = sparse.vstack([A_c] * time_binned.shape[0], format="csr")
         # Cartesian spline with time dependence
         # Cartesian spline with time dependence
-        if hasattr(self, "pos_corr1") and self.use_poscorr:
+        if hasattr(self, "pos_corr1") and self.time_corrector == "pos_corr":
             # Cartesian spline with poscor dependence
-            A3 = sparse.hstack(
-                [
-                    A2,
-                    A2.multiply(poscorr1_binned.ravel()[:, None]),
-                    A2.multiply(poscorr2_binned.ravel()[:, None]),
-                    A2.multiply((poscorr1_binned * poscorr2_binned).ravel()[:, None]),
-                ],
-                format="csr",
-            )
+            A3 = _combine_A(A2, poscorr=[poscorr1_binned, poscorr2_binned])
         else:
             # Cartesian spline with time dependence
-            A3 = sparse.hstack(
-                [
-                    A2,
-                    A2.multiply(time_binned.ravel()[:, None]),
-                    A2.multiply(time_binned.ravel()[:, None] ** 2),
-                    A2.multiply(time_binned.ravel()[:, None] ** 3),
-                ],
-                format="csr",
-            )
+            A3 = _combine_A(A2, time=time_binned)
 
         model = A3.dot(self.time_model_w).reshape(flux_binned.shape) + 1
         fig, ax = plt.subplots(2, 2, figsize=(7, 6), facecolor="w")
@@ -1356,7 +1361,7 @@ class Machine(object):
                 dx,
                 dy,
                 n_knots=self.n_time_knots,
-                radius=8,
+                radius=self.time_radius,
                 spacing=self.cartesian_knot_spacing,
             )
             A_cp3 = sparse.hstack([A_cp, A_cp, A_cp, A_cp], format="csr")
@@ -1383,7 +1388,7 @@ class Machine(object):
 
                 # Divide through by expected velocity aberration
                 X = self.mean_model.copy()
-                if hasattr(self, "pos_corr1") and self.use_poscorr:
+                if hasattr(self, "pos_corr1") and self.time_corrector == "pos_corr":
                     # use median pos_corr
                     t_mult = np.hstack(
                         np.array(
@@ -1483,6 +1488,8 @@ class Machine(object):
         )
         # create aperture mask
         self.aperture_mask = np.array(self.mean_model >= cut[::, None])
+        # make sure there are no all-pixel apertures due to `mean_model[i] = 0`
+        self.aperture_mask[self.aperture_mask.sum(axis=1) == self.npixels] = False
         # compute flux metrics. Have to round to 10th decimal due to floating point
         self.FLFRCSAP = np.round(
             compute_FLFRCSAP(self.mean_model, self.aperture_mask), 10
