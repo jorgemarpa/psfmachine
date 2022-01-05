@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from matplotlib import patches
 import urllib.request
 import tarfile
+from kbackground import Estimator
 
 from .utils import get_gaia_sources
 from .aperture import estimate_source_centroids_aperture, aperture_mask_to_2d
@@ -52,6 +53,7 @@ class TPFMachine(Machine):
         tpf_meta=None,
         time_corrector="pos_corr",
         cartesian_knot_spacing="sqrt",
+        fit_bkg=False,
     ):
         super().__init__(
             time=time,
@@ -88,9 +90,102 @@ class TPFMachine(Machine):
         self.tpf_meta = tpf_meta
         self.time_corrector = time_corrector
         self.cartesian_knot_spacing = cartesian_knot_spacing
+        self.fit_bkg = fit_bkg
+        if self.fit_bkg:
+            self.bkg_substracted = False
 
     def __repr__(self):
         return f"TPFMachine (N sources, N times, N pixels): {self.shape}"
+
+    def build_background_model(self, plot=False):
+        """
+        Function to fit the background signal of the TPF stack using `kbackground`
+        package. This is a Kepler/K2 specific tool.
+        Fits a smooth polynomial to the TPF background pixels (inverse of
+        `machine.source_mask`) that can also be augmented with the mission background
+        pixels (https://archive.stsci.edu/missions-and-data/kepler/kepler-bulk-downloads).
+
+        This helps removing the known 'rolling band' effect seen in some CCD channels.
+        The function changes the attribute `self.flux` removing the background and
+        creates the following new attributes:
+        - `self.bkg_row` has the bacground pixel row number
+        - `self.bkg_column` has the bacground pixel column number
+        - `self.bkg_flux` has the bacground pixel flux value
+        - `self.bkg_model` has the background model from `kbackground`
+
+        Parameters
+        ----------
+        plot : boolean
+            Show diagnostic plot
+        """
+        if not self.tpf_meta["mission"][0].lower() in ["kepler", "k2", "ktwo"]:
+            log.info(
+                "Warning: Background fitting is a Kepler only tool, "
+                "then no background model will be fitted."
+            )
+            return
+        # create source mask
+        self._get_source_mask()
+        # invert maks to get bkg pixels
+        bkg_mask = ~np.asarray(
+            (self.source_mask.todense()).sum(axis=0).astype(bool)
+        ).ravel()
+        bkg_row = self.row[bkg_mask]
+        bkg_column = self.column[bkg_mask]
+        bkg_flux = self.flux[:, bkg_mask]
+
+        # sort by row
+        row_sort = np.unique(np.argsort(bkg_row))
+        self.bkg_row = bkg_row[row_sort]
+        self.bkg_column = bkg_column[row_sort]
+        self.bkg_flux = bkg_flux[:, row_sort]
+        del bkg_row, bkg_column, bkg_flux, row_sort
+
+        # fit bkg model at all times
+        bkg_est = Estimator(self.bkg_row, self.bkg_column, self.bkg_flux)
+        # eval bkg model at all times all pixels
+        self.bkg_model = bkg_est.model(index=None, row=self.row, column=self.column)
+
+        if plot:
+            return self.plot_background_model(frame_index=self.nt // 2)
+        return
+
+    def plot_background_model(self, frame_index=100):
+        """
+        Diagnostic plot of background model
+
+        Parameters
+        ----------
+        frame_index : int
+            The frame index to be shown.
+        """
+        if not hasattr(self, "bkg_flux"):
+            raise AttributeError(
+                "No background model created, run `build_background_model()` first."
+            )
+        fig, ax = plt.subplots(1, 2, figsize=(19, 7))
+        cbar = ax[0].scatter(
+            self.bkg_column,
+            self.bkg_row,
+            c=self.bkg_flux[frame_index] - np.median(self.bkg_flux, axis=0),
+            s=0.5,
+            vmin=-20,
+            vmax=20,
+        )
+        ax[0].set_title("Data Background pixels")
+        plt.colorbar(cbar, ax=ax[0], label="Median substracted Flux")
+        cbar = ax[1].scatter(
+            self.column,
+            self.row,
+            c=self.bkg_model[frame_index],
+            s=0.5,
+            vmin=-20,
+            vmax=20,
+        )
+        ax[1].set_title("Model Background (all) pixels")
+        plt.colorbar(cbar, ax=ax[1], label="Median substracted Flux")
+
+        return fig
 
     def fit_lightcurves(
         self,
@@ -146,6 +241,10 @@ class TPFMachine(Machine):
             Compute or not Simple Aperture Photometry. See
             `Machine.compute_aperture_photometry()` for details.
         """
+        # fit background
+        if self.fit_bkg:
+            self.build_background_model(plot=plot)
+
         # use PRF model from FFI or create one with TPF data
         if load_shape_model:
             self.load_shape_model(input=shape_model_file, plot=plot)
@@ -662,6 +761,7 @@ class TPFMachine(Machine):
         dr=2,
         time_mask=None,
         apply_focus_mask=True,
+        fit_bkg=False,
         query_ra=None,
         query_dec=None,
         query_rad=None,
@@ -760,7 +860,7 @@ class TPFMachine(Machine):
             focus_mask,
             qual_mask,
             saturated_mask,
-        ) = _parse_TPFs(tpfs, **kwargs)
+        ) = _parse_TPFs(tpfs, fit_bkg=fit_bkg, **kwargs)
 
         if time_mask is not None:
             time_mask = np.copy(time_mask)[qual_mask]
@@ -858,11 +958,12 @@ class TPFMachine(Machine):
             pos_corr2=pos_corr2,
             tpf_meta=tpf_meta,
             time_mask=time_mask,
+            fit_bkg=fit_bkg,
             **kwargs,
         )
 
 
-def _parse_TPFs(tpfs, **kwargs):
+def _parse_TPFs(tpfs, fit_bkg=False, **kwargs):
     """
     Parse TPF collection to extract times, pixel fluxes, flux errors and tpf-index
     per pixel
@@ -936,6 +1037,11 @@ def _parse_TPFs(tpfs, **kwargs):
     flux_err = np.hstack(
         [np.hstack(tpf.flux_err[qual_mask].transpose([2, 0, 1])) for tpf in tpfs]
     )
+    if fit_bkg:
+        flux_bkg = np.hstack(
+            [np.hstack(tpf.flux_bkg[qual_mask].transpose([2, 0, 1])) for tpf in tpfs]
+        )
+        flux += flux_bkg
 
     sat_mask = []
     for tpf in tpfs:
