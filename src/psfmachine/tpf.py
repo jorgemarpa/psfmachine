@@ -174,7 +174,7 @@ class TPFMachine(Machine):
             raise AttributeError(
                 "No background model created, run `build_background_model()` first."
             )
-        fig, ax = plt.subplots(1, 2, figsize=(19, 7))
+        fig, ax = plt.subplots(1, 2, figsize=(12, 4))
         cbar = ax[0].scatter(
             self.bkg_column,
             self.bkg_row,
