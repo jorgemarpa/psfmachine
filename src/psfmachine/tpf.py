@@ -171,19 +171,21 @@ class TPFMachine(Machine):
             self.bkg_column,
             self.bkg_flux,
             mask=self.bkg_mask,
+            tknotspacing=5,
+            xknotspacing=10,
         )
 
         # remove background when necessary, this is done just once
         if not self.bkg_substracted:
             # create source mask
 
-            # bkg_mask = ~np.asarray(
-            #     (self.source_mask.todense()).sum(axis=0).astype(bool)
-            # ).ravel()
+            bkg_mask = ~np.asarray(
+                (self.source_mask.todense()).sum(axis=0).astype(bool)
+            ).ravel()
             # remove bkg and median value (kbackground fits the median-normalized
             # background)
             self.flux -= self.bkg_est.model[:, self.pixel_mask]
-            self.flux -= np.median(self.bkg_flux[:, self.bkg_mask], axis=1)[:, None]
+            self.flux -= np.median(self.flux[:, bkg_mask])
             # set bkg subs flat on so this step happens only one time
             self.bkg_substracted = True
 
@@ -205,8 +207,6 @@ class TPFMachine(Machine):
             raise AttributeError(
                 "No background model created, run `build_background_model()` first."
             )
-        # vmin = np.median(self.bkg_est.model[frame_index]) * 0.9
-        # vmax = np.median(self.bkg_est.model[frame_index]) * 1.1
         vmin = -20
         vmax = 20
         fig, ax = plt.subplots(1, 2, figsize=(13, 5))
