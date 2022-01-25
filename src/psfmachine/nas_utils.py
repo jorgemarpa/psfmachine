@@ -1,7 +1,7 @@
 import socket
 import pandas as pd
 import numpy as np
-from astropy.coordinates import SkyCoord, match_coordinates_3d
+from astropy.coordinates import SkyCoord
 import astropy.units as u
 from astropy.table import Table
 

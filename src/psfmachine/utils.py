@@ -57,8 +57,8 @@ def get_gaia_sources(ras, decs, rads, magnitude_limit=18, epoch=2020, dr=2):
 
     internet = True
     try:
-        request = requests.get("https://gea.esac.esa.int/archive/", timeout=5)
-    except (requests.ConnectionError, requests.Timeout) as e:
+        _ = requests.get("https://gea.esac.esa.int/archive/", timeout=5)
+    except (requests.ConnectionError, requests.Timeout):
         internet = False
         # print("No internet connection")
 
