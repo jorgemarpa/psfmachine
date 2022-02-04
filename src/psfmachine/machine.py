@@ -1164,29 +1164,21 @@ class Machine(object):
         prior_mu = np.zeros(A.shape[1]) - 10
 
         nan_mask = np.isfinite(mean_f.ravel())
+        bad = np.zeros_like(mean_f.ravel(), dtype=bool)
 
         # we solve for A * psf_w = mean_f
-        psf_w, psf_w_err = solve_linear_model(
-            A,
-            y=mean_f.ravel(),
-            #            y_err=mean_f_err.ravel(),
-            k=nan_mask,
-            prior_mu=prior_mu,
-            prior_sigma=prior_sigma,
-            errors=True,
-        )
-
-        bad = sigma_clip(mean_f.ravel() - A.dot(psf_w), sigma=5).mask
-
-        psf_w, psf_w_err = solve_linear_model(
-            A,
-            y=mean_f.ravel(),
-            #            y_err=mean_f_err.ravel(),
-            k=nan_mask & ~bad,
-            prior_mu=prior_mu,
-            prior_sigma=prior_sigma,
-            errors=True,
-        )
+        n = 1
+        while n <= 3:
+            psf_w, psf_w_err = solve_linear_model(
+                A,
+                y=mean_f.ravel(),
+                k=nan_mask & ~bad,
+                prior_mu=prior_mu,
+                prior_sigma=prior_sigma,
+                errors=True,
+            )
+            bad = sigma_clip(mean_f.ravel() - A.dot(psf_w), sigma=5).mask
+            n += 1
 
         self.psf_w = psf_w
         self.psf_w_err = psf_w_err
@@ -1337,7 +1329,7 @@ class Machine(object):
         dx = dx.data * u.deg.to(u.arcsecond)
         dy = dy.data * u.deg.to(u.arcsecond)
 
-        fig, ax = plt.subplots(2, 2, figsize=(9.5, 6.5))
+        fig, ax = plt.subplots(3, 2, figsize=(9, 10.5), constrained_layout=True)
         im = ax[0, 0].scatter(
             dx, dy, c=mean_f, cmap="viridis", vmin=-3, vmax=-1, s=3, rasterized=True
         )
@@ -1418,8 +1410,48 @@ class Machine(object):
         )
         ax[0, 0].set_aspect("equal", adjustable="box")
         ax[1, 0].set_aspect("equal", adjustable="box")
-        cbar = fig.colorbar(im, ax=ax, shrink=0.7, location="right")
+        cbar = fig.colorbar(im, ax=ax[:2, 1], shrink=0.7, location="right")
         cbar.set_label("log$_{10}$ Normalized Flux")
+        mean_f = 10 ** mean_f
+        model = 10 ** A.dot(self.psf_w)
+
+        im = ax[2, 0].scatter(
+            dx,
+            dy,
+            c=(model - mean_f) / mean_f,
+            cmap="RdBu",
+            vmin=-1,
+            vmax=1,
+            s=3,
+            rasterized=True,
+        )
+        ax[2, 1].scatter(
+            phi,
+            r,
+            c=(model - mean_f) / mean_f,
+            cmap="RdBu",
+            vmin=-1,
+            vmax=1,
+            s=3,
+            rasterized=True,
+        )
+        ax[2, 0].set_aspect("equal", adjustable="box")
+        ax[2, 0].set(
+            xlabel=r'$\delta x$ ["]',
+            ylabel=r'$\delta y$ ["]',
+            title="Residuals",
+            xlim=(-radius, radius),
+            ylim=(-radius, radius),
+        )
+        ax[2, 1].set(
+            xlabel=r"$\phi$ [$^\circ$]",
+            ylabel='$r$ ["]',
+            title="Residuals",
+            ylim=(0, radius),
+            yticks=np.linspace(0, radius, 5, dtype=int),
+        )
+        cbar = fig.colorbar(im, ax=ax[2, 1], shrink=0.9, location="right")
+        cbar.set_label("(F$_M$ - F$_D$)/F$_D$")
 
         return fig
 
