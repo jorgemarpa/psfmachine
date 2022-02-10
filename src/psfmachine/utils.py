@@ -444,3 +444,31 @@ def _combine_A(A, poscorr=None, time=None):
             format="csr",
         )
         return A2
+
+
+def threshold_binning(x, y, z, abs_thrd=10, bins=15, cen_fn=np.nanmedian):
+    if isinstance(bins, int):
+        bins = [bins, bins]
+    xedges = np.linspace(x.min(), x.max(), num=bins[0] + 1)
+    yedges = np.linspace(y.min(), y.max(), num=bins[1] + 1)
+    bin_mask = np.zeros_like(z, dtype=bool)
+    new_x, new_y, new_z = [], [], []
+
+    for j in range(1, len(xedges)):
+        for k in range(1, len(yedges)):
+            idx = np.where(
+                (x >= xedges[j - 1])
+                & (x < xedges[j])
+                & (y >= yedges[k - 1])
+                & (y < yedges[k])
+            )[0]
+            if len(idx) >= abs_thrd:
+                bin_mask[idx] = True
+                new_x.append((xedges[j - 1] + xedges[j]) / 2)
+                new_y.append((yedges[k - 1] + yedges[k]) / 2)
+                new_z.append(cen_fn(z[idx]))
+    new_x.append(x[~bin_mask])
+    new_y.append(y[~bin_mask])
+    new_z.append(z[~bin_mask])
+
+    return (np.hstack(new_x), np.hstack(new_y), np.hstack(new_z))

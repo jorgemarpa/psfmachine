@@ -16,6 +16,7 @@ from .utils import (
     solve_linear_model,
     sparse_lessthan,
     _combine_A,
+    threshold_binning,
 )
 from .aperture import optimize_aperture, compute_FLFRCSAP, compute_CROWDSAP
 
@@ -1083,7 +1084,13 @@ class Machine(object):
         return fig
 
     def build_shape_model(
-        self, plot=False, flux_atol=1, flux_rtol=0.001, frame_index="mean", **kwargs
+        self,
+        plot=False,
+        flux_atol=1,
+        flux_rtol=0.001,
+        frame_index="mean",
+        bin_data=False,
+        **kwargs,
     ):
         """
         Builds a sparse model matrix of shape nsources x npixels to be used when
@@ -1150,6 +1157,11 @@ class Machine(object):
         phi_b = self.uncontaminated_source_mask.multiply(self.phi).data
         r_b = self.uncontaminated_source_mask.multiply(self.r).data
 
+        if bin:
+            phi_b, r_b, mean_f = threshold_binning(
+                phi_b, r_b, mean_f, bins=100, abs_thrd=3
+            )
+
         # build a design matrix A with b-splines basis in radius and angle axis.
         A = _make_A_polar(
             phi_b.ravel(),
@@ -1191,7 +1203,7 @@ class Machine(object):
         )
 
         if plot:
-            return self.plot_shape_model(frame_index=frame_index)
+            return self.plot_shape_model(frame_index=frame_index, bin_data=bin_data)
         return
 
     def _update_source_mask_remove_bkg_pixels(
@@ -1289,7 +1301,7 @@ class Machine(object):
         mean_model.eliminate_zeros()
         self.mean_model = mean_model
 
-    def plot_shape_model(self, radius=20, frame_index="mean"):
+    def plot_shape_model(self, radius=20, frame_index="mean", bin_data=False):
         """
         Diagnostic plot of shape model.
 
@@ -1329,9 +1341,19 @@ class Machine(object):
         dx = dx.data * u.deg.to(u.arcsecond)
         dy = dy.data * u.deg.to(u.arcsecond)
 
+        if bin:
+            dx, dy, mean_f = threshold_binning(dx, dy, mean_f, bins=100, abs_thrd=3)
+
         fig, ax = plt.subplots(3, 2, figsize=(9, 10.5), constrained_layout=True)
         im = ax[0, 0].scatter(
-            dx, dy, c=mean_f, cmap="viridis", vmin=-3, vmax=-1, s=3, rasterized=True
+            dx,
+            dy,
+            c=mean_f,
+            cmap="viridis",
+            vmin=-3,
+            vmax=-1,
+            s=3,
+            rasterized=True,
         )
         ax[0, 0].set(
             ylabel=r'$\delta y$ ["]',
@@ -1355,7 +1377,26 @@ class Machine(object):
 
         phi, r = np.arctan2(dy, dx), np.hypot(dx, dy)
         im = ax[0, 1].scatter(
-            phi, r, c=mean_f, cmap="viridis", vmin=-3, vmax=-1, s=3, rasterized=True
+            phi,
+            r,
+            c=mean_f,
+            cmap="viridis",
+            vmin=-3,
+            vmax=-1,
+            s=3,
+            rasterized=True,
+        )
+        phi_knots, r_knots = np.meshgrid(
+            np.linspace(-np.pi, np.pi, self.n_phi_knots),
+            # np.linspace(self.rmin, self.rmax, self.n_r_knots),
+            np.linspace(self.rmin ** 0.5, self.rmax ** 0.5, self.n_r_knots) ** 2,
+        )
+        ax[0, 1].scatter(
+            phi_knots,
+            r_knots,
+            c="k",
+            marker=".",
+            s=5,
         )
         ax[0, 1].set(
             ylabel='$r$ ["]',
