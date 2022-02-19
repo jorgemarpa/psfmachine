@@ -1121,7 +1121,7 @@ class Machine(object):
                 phi_b,
                 r_b,
                 mean_f,
-                z_err=mean_f_err,
+                z_err=None,
                 bins=nbins,
                 abs_thresh=5,
             )
@@ -1145,7 +1145,7 @@ class Machine(object):
         psf_w, psf_w_err = solve_linear_model(
             A,
             y=mean_f.ravel(),
-            #            y_err=mean_f_err.ravel(),
+            # y_err=mean_f_err.ravel(),
             k=nan_mask,
             prior_mu=prior_mu,
             prior_sigma=prior_sigma,
@@ -1157,7 +1157,7 @@ class Machine(object):
         psf_w, psf_w_err = solve_linear_model(
             A,
             y=mean_f.ravel(),
-            #            y_err=mean_f_err.ravel(),
+            # y_err=mean_f_err.ravel(),
             k=nan_mask & ~bad,
             prior_mu=prior_mu,
             prior_sigma=prior_sigma,
