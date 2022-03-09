@@ -788,6 +788,13 @@ class Machine(object):
             pc1_smooth = np.array(pc1_smooth)
             pc2_smooth = np.array(pc2_smooth)
 
+            pc1_smooth = (pc1_smooth - pc1_smooth.mean()) / (
+                pc1_smooth.max() - pc1_smooth.mean()
+            )
+            pc2_smooth = (pc2_smooth - pc2_smooth.mean()) / (
+                pc2_smooth.max() - pc2_smooth.mean()
+            )
+
             # do poscorr binning
             if not downsample:
                 pc1_bin = np.vstack(
