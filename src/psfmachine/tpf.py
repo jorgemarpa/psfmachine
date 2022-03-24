@@ -1164,7 +1164,7 @@ def _preprocess(
         """Finds and removes saturated pixels, including bleed columns."""
         # Which pixels are saturated
         saturated = np.nanpercentile(flux, 99, axis=0)
-        saturated = np.where((saturated > saturation_limit).astype(float))[0]
+        saturated = np.where((flux > saturation_limit).astype(float))[0]
 
         # Find bad pixels, including allowence for a bleed column.
         bad_pixels = np.vstack(
@@ -1194,6 +1194,7 @@ def _preprocess(
     _, unique_pix = np.unique(locs, axis=1, return_index=True)
     unique_pix = np.in1d(np.arange(len(ra)), unique_pix)
     # No saturation and bleed columns
+    saturated = _saturated_pixels_mask(flux, column, row)
 
     mask = not_nan & unique_pix & ~saturated
 
