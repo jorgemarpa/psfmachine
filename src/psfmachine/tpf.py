@@ -1107,7 +1107,7 @@ def _parse_TPFs(tpfs, renormalize_tpf_bkg=True, **kwargs):
     sat_mask = []
     for tpf in tpfs:
         # Keplerish saturation limit
-        saturated = np.nanmax(tpf.flux, axis=0).T.value > 1.4e5
+        saturated = np.nanmax(tpf.flux, axis=0).T.value > 1.2e5
         saturated = np.hstack(
             (np.gradient(saturated.astype(float))[1] != 0) | saturated
         )
@@ -1144,8 +1144,6 @@ def _parse_TPFs(tpfs, renormalize_tpf_bkg=True, **kwargs):
 def _preprocess(
     flux,
     flux_err,
-    # pos_corr1,
-    # pos_corr2,
     unw,
     locs,
     ra,
@@ -1169,8 +1167,8 @@ def _preprocess(
         # Find bad pixels, including allowence for a bleed column.
         bad_pixels = np.vstack(
             [
-                np.hstack([column[saturated] + idx for idx in np.arange(-3, 3)]),
-                np.hstack([row[saturated] for idx in np.arange(-3, 3)]),
+                np.hstack([column[saturated] + idx for idx in np.arange(-1, 1)]),
+                np.hstack([row[saturated] for idx in np.arange(-1, 1)]),
             ]
         ).T
         # Find unique row/column combinations
@@ -1188,15 +1186,9 @@ def _preprocess(
     flux = np.asarray(flux)
     flux_err = np.asarray(flux_err)
 
-    # Finite pixels
+    # Finite and non-saturated pixels
     not_nan = np.isfinite(flux).all(axis=0)
-    # Unique Pixels
-    _, unique_pix = np.unique(locs, axis=1, return_index=True)
-    unique_pix = np.in1d(np.arange(len(ra)), unique_pix)
-    # No saturation and bleed columns
-    saturated = _saturated_pixels_mask(flux, column, row)
-
-    mask = not_nan & unique_pix & ~saturated
+    mask = not_nan & ~saturated
 
     locs = locs[:, mask]
     column = column[mask]
@@ -1205,9 +1197,20 @@ def _preprocess(
     dec = dec[mask]
     flux = flux[:, mask]
     flux_err = flux_err[:, mask]
-    # pos_corr1 = pos_corr1[:, mask]
-    # pos_corr2 = pos_corr2[:, mask]
     unw = unw[mask]
+
+    # Unique Pixels
+    _, unique_pix = np.unique(locs, axis=1, return_index=True)
+    unique_pix = np.in1d(np.arange(len(ra)), unique_pix)
+
+    locs = locs[:, unique_pix]
+    column = column[unique_pix]
+    row = row[unique_pix]
+    ra = ra[unique_pix]
+    dec = dec[unique_pix]
+    flux = flux[:, unique_pix]
+    flux_err = flux_err[:, unique_pix]
+    unw = unw[unique_pix]
 
     return (flux, flux_err, unw, locs, ra, dec, column, row)
 
