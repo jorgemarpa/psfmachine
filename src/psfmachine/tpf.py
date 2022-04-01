@@ -1358,10 +1358,28 @@ def _clean_source_list(sources, ra, dec, pixel_tolerance=4):
         inside[k] = (raok & decok).any()
     del raok, decok
 
+    # flagging soures within 1"
+    idx, sep, _ = match_coordinates_sky(
+        SkyCoord(np.asarray(sources[["ra", "dec"]]), unit="deg"),
+        SkyCoord(np.asarray(sources[["ra", "dec"]]), unit="deg"),
+        nthneighbor=2,
+    )
+    match1 = np.where(sep < 1 * u.arcsec)[0]
+    match2 = idx[sep < 1 * u.arcsec]
+    blended_faint = np.ones(sources.shape[0], dtype=bool)
+
+    for a, b in zip(match1, match2):
+        print(a, b)
+        if sources.phot_g_mean_mag[a] >= sources.phot_g_mean_mag[b]:
+            blended_faint[a] = False
+        else:
+            blended_faint[b] = False
+
     # Keep track of sources that we removed
     sources.loc[:, "clean_flag"] = 0
     # to avoid pandas SettingWithCopyWarning
     sources.clean_flag.where(inside, 2 ** 0, inplace=True)
+    sources.clean_flag.where(blended_faint, 2 ** 1, inplace=True)
     # combine 2 source masks
     clean = sources.clean_flag == 0
     removed_sources = sources[~clean].reset_index(drop=True)
