@@ -9,6 +9,7 @@ import lightkurve as lk
 from astropy.utils.data import get_pkg_data_filename
 from astropy.time import Time
 
+from psfmachine import PACKAGEDIR
 from psfmachine import Machine, TPFMachine
 from psfmachine.tpf import (
     _parse_TPFs,
@@ -32,6 +33,8 @@ def test_parse_TPFs():
         times,
         flux,
         flux_err,
+        pos_corr1,
+        pos_corr2,
         column,
         row,
         unw,
@@ -49,11 +52,17 @@ def test_parse_TPFs():
     assert focus_mask.shape == (10,)
     assert qual_mask.shape == (10,)
     assert sat_mask.shape == (345,)
+    assert pos_corr1.shape == (10, 10)
+    assert pos_corr2.shape == (10, 10)
 
     locs, ra, dec = _wcs_from_tpfs(tpfs)
     assert locs.shape == (2, 345)
     assert ra.shape == (345,)
     assert dec.shape == (345,)
+
+    # save-keep valid pixels for later testing
+    mask = np.isfinite(flux).all(axis=0) & ~sat_mask
+    locs_s = [f"{x[0]}_{x[1]}" for x in locs.T[mask]]
 
     flux, flux_err, unw, locs, ra, dec, column, row = _preprocess(
         flux,
@@ -68,17 +77,28 @@ def test_parse_TPFs():
         sat_mask,
     )
 
+    # check all original pixels show only once after preprocess
+    # cheking no duplicated pixels remain
+    _, unique_idx = np.unique(locs, axis=1, return_index=True)
+    unique_idx = np.in1d(np.arange(len(ra)), unique_idx)
+    assert (~unique_idx).sum() == 0
+
+    # valid non-duplicated pixels
+    locs_su = [f"{x[0]}_{x[1]}" for x in locs.T]
+    # check we don't loose valid pixels
+    assert np.isin(locs_s, locs_su).all()
+
     assert np.isfinite(flux).all()
     assert np.isfinite(flux_err).all()
     assert np.isfinite(locs).all()
     assert np.isfinite(ra).all()
     assert np.isfinite(dec).all()
 
-    assert locs.shape == (2, 285)
-    assert ra.shape == (285,)
-    assert dec.shape == (285,)
-    assert flux.shape == (10, 285)
-    assert flux_err.shape == (10, 285)
+    assert locs.shape == (2, 287)
+    assert ra.shape == (287,)
+    assert dec.shape == (287,)
+    assert flux.shape == (10, 287)
+    assert flux_err.shape == (10, 287)
 
     sources = _get_coord_and_query_gaia(tpfs)
 
@@ -181,3 +201,66 @@ def test_load_save_shape_model():
     assert ((org_state["mean_model"] == new_state["mean_model"]).data).all()
     # remove shape model from disk
     os.remove(file_name)
+
+
+@pytest.mark.remote_data
+def test_load_shape_model_from_zenodo():
+    # instantiate a machine object
+    machine = TPFMachine.from_TPFs(tpfs, apply_focus_mask=False)
+
+    # load a FFI-PRF model from zenodo repo
+    machine.load_shape_model(plot=False, input=None)
+    state = machine.__dict__
+
+    # check that critical attributes match
+    assert state["n_r_knots"] == 10
+    assert state["n_phi_knots"] == 15
+    assert state["rmin"] == 1
+    assert state["rmax"] == 16
+    assert state["cut_r"] == 6
+    assert state["psf_w"].shape == (169,)
+
+    # check file is in directory for future use
+    assert os.path.isfile(
+        f"{PACKAGEDIR}/data/"
+        f"{machine.tpf_meta['mission'][0]}_FFI_PRFmodels_v1.0.tar.gz"
+    )
+
+
+@pytest.mark.remote_data
+def test_get_source_centroids():
+    # test centroid fx
+    machine = TPFMachine.from_TPFs(tpfs, apply_focus_mask=False)
+    machine._get_source_mask()
+    machine.get_source_centroids(method="poscor")
+    # check centroid arrays have the right shape
+    assert machine.source_centroids_column_poscor.shape == (19, 10)
+    assert machine.source_centroids_row_poscor.shape == (19, 10)
+    machine.get_source_centroids(method="scene")
+    assert machine.source_centroids_column_scene.shape == (19, 10)
+    assert machine.source_centroids_row_scene.shape == (19, 10)
+
+    tpf_idx = []
+    for i in range(len(machine.sources)):
+        tpf_idx.append(
+            [k for k, ss in enumerate(machine.tpf_meta["sources"]) if i in ss]
+        )
+    # check centroids agree within a pixel for target sources when comparing vs
+    # pipeline aperture moments aperture TPF.estimate_centroids()
+    for i in range(machine.nsources):
+        if machine.sources.tpf_id[i]:
+            if len(tpf_idx[i]) > 1:
+                continue
+            col_cent, row_cent = tpfs[tpf_idx[i][0]].estimate_centroids()
+            assert (
+                np.abs(col_cent - machine.source_centroids_column_scene[i]).value < 1
+            ).all()
+            assert (
+                np.abs(row_cent - machine.source_centroids_row_scene[i]).value < 1
+            ).all()
+            assert (
+                np.abs(col_cent - machine.source_centroids_column_poscor[i]).value < 1
+            ).all()
+            assert (
+                np.abs(row_cent - machine.source_centroids_row_poscor[i]).value < 1
+            ).all()

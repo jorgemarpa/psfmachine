@@ -1,5 +1,6 @@
 """Subclass of `Machine` that Specifically work with TPFs"""
 import os
+import logging
 import numpy as np
 import lightkurve as lk
 from astropy.coordinates import SkyCoord, match_coordinates_sky
@@ -7,12 +8,18 @@ from astropy.time import Time
 from astropy.io import fits
 import astropy.units as u
 import matplotlib.pyplot as plt
+from matplotlib import patches
+import urllib.request
+import tarfile
+from kbackground import Estimator
 
 from .utils import get_gaia_sources
+from .aperture import estimate_source_centroids_aperture, aperture_mask_to_2d
 from .machine import Machine
 from .version import __version__
+from psfmachine import PACKAGEDIR
 
-
+log = logging.getLogger(__name__)
 __all__ = ["TPFMachine"]
 
 
@@ -40,10 +47,13 @@ class TPFMachine(Machine):
         rmin=1,
         rmax=16,
         pix2obs=None,
-        #        pos_corr1=None,
-        #        pos_corr2=None,
+        pos_corr1=None,
+        pos_corr2=None,
         focus_mask=None,
         tpf_meta=None,
+        time_corrector="pos_corr",
+        cartesian_knot_spacing="sqrt",
+        bkg_substracted=True,
     ):
         super().__init__(
             time=time,
@@ -64,6 +74,10 @@ class TPFMachine(Machine):
             rmax=rmax,
         )
         self.tpfs = tpfs
+        # match cadences
+        self.cadenceno = self.tpfs[0].cadenceno[
+            np.in1d(self.tpfs[0].time.jd, self.time)
+        ]
 
         # combine focus mask and time mask if they exist
         if time_mask is None and focus_mask is None:
@@ -75,24 +89,193 @@ class TPFMachine(Machine):
         else:
             self.time_mask = time_mask & focus_mask
         self.pix2obs = pix2obs
-        #        self.pos_corr1 = pos_corr1
-        #        self.pos_corr2 = pos_corr2
+        self.pos_corr1 = pos_corr1
+        self.pos_corr2 = pos_corr2
         self.tpf_meta = tpf_meta
+        self.time_corrector = time_corrector
+        self.cartesian_knot_spacing = cartesian_knot_spacing
+        self.bkg_substracted = bkg_substracted
 
     def __repr__(self):
         return f"TPFMachine (N sources, N times, N pixels): {self.shape}"
 
+    def remove_background_model(self, plot=False, data_augment=None):
+        """
+        Function to fit and remove the background signal of the TPF stack using
+        `kbackground` package. This is a Kepler/K2 specific tool.
+        Fits a smooth polynomial to the TPF background pixels (inverse of
+        `machine.source_mask`) that can also be augmented with the mission background
+        pixels (https://archive.stsci.edu/missions-and-data/kepler/kepler-bulk-downloads).
+
+        This helps removing the known 'rolling band' effect seen in some Kepler CCD channels.
+        The function changes the attribute `self.flux` removing the background (just once)
+        and creates the following new attributes:
+        - `self.bkg_row` has the bacground pixel row number (can be augmented)
+        - `self.bkg_column` has the bacground pixel column number (can be augmented)
+        - `self.bkg_flux` has the bacground pixel flux value (can be augmented)
+        - `self.bkg_estimator` has the background estimator from `kbackground`
+        - `self.bkg_pixel_mask` is the background pixel mask
+
+        Parameters
+        ----------
+        plot : boolean
+            Show diagnostic plot
+        data_augment : dictionary
+            Dictionary with the pixel row, column and flux value to
+            augment the background pixels. This argument is useful to include Kepler's
+            background pixels from the mission. The dictionary has to have the following
+            keys; "column", "row", and "flux".
+        """
+        if not self.tpf_meta["mission"][0].lower() in ["kepler", "k2", "ktwo"]:
+            log.info(
+                "Warning: Background fitting is a Kepler only tool, "
+                "then no background model will be fitted."
+            )
+            return
+        # invert maks to get bkg pixels from TPFs
+        self._get_source_mask()
+        bkg_pixel_mask = ~np.asarray(
+            (self.source_mask.todense()).sum(axis=0).astype(bool)
+        ).ravel()
+        bkg_row = self.row
+        bkg_column = self.column
+        bkg_flux = self.flux
+        # keep track of which pixels comes from TPFs
+        pixels_in_tpf = np.ones_like(self.row, dtype=bool)
+
+        if data_augment:
+            # augment background pixels
+            bkg_row = np.hstack([bkg_row, data_augment["row"]])
+            bkg_column = np.hstack([bkg_column, data_augment["column"]])
+            bkg_flux = np.append(bkg_flux, data_augment["flux"], axis=1)
+            # keep track of which pixels comes from augmented
+            pixels_in_tpf = np.append(
+                pixels_in_tpf, np.zeros_like(data_augment["row"], dtype=bool)
+            )
+            # keep track of background/source pixels
+            bkg_pixel_mask = np.append(
+                bkg_pixel_mask, np.ones_like(data_augment["row"], dtype=bool)
+            )
+
+        # sort by row index
+        row_sort = np.unique(np.argsort(bkg_row))
+        self.bkg_row = bkg_row[row_sort]
+        self.bkg_column = bkg_column[row_sort]
+        self.bkg_flux = bkg_flux[:, row_sort]
+        self.pixels_in_tpf = pixels_in_tpf[row_sort]
+        self.bkg_pixel_mask = bkg_pixel_mask[row_sort]
+        del bkg_row, bkg_column, bkg_flux, row_sort, bkg_pixel_mask, pixels_in_tpf
+
+        # fit bkg model at all times
+        self.bkg_estimator = Estimator(
+            self.cadenceno,
+            self.bkg_row,
+            self.bkg_column,
+            self.bkg_flux,
+            mask=self.bkg_pixel_mask,
+            tknotspacing=4,
+            xknotspacing=6,
+        )
+
+        # remove background when necessary, this is done just once
+        if not self.bkg_substracted:
+            bkg_mask = ~np.asarray(
+                (self.source_mask.todense()).sum(axis=0).astype(bool)
+            ).ravel()
+            # remove bkg and median value (kbackground fits the median-normalized
+            # background)
+            self.flux -= self.bkg_estimator.model[:, self.pixels_in_tpf]
+            self.flux -= np.median(self.flux[:, bkg_mask])
+            # set bkg subs flag so this step happens only one time
+            self.bkg_substracted = True
+
+        if plot:
+            self.bkg_estimator.plot()
+            self.plot_background_model(frame_index=self.nt // 2)
+            return
+        return
+
+    def plot_background_model(self, frame_index=100):
+        """
+        Diagnostic plot of background model
+
+        Parameters
+        ----------
+        frame_index : int
+            The frame index to be shown.
+        """
+        if not hasattr(self, "bkg_flux"):
+            raise AttributeError(
+                "No background model created, run `build_background_model()` first."
+            )
+        vmin = -20
+        vmax = 20
+        fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+        cbar = ax[0].scatter(
+            self.bkg_column[self.bkg_estimator.mask],
+            self.bkg_row[self.bkg_estimator.mask],
+            c=self.bkg_flux[frame_index, self.bkg_estimator.mask]
+            - np.median(self.bkg_flux[frame_index, self.bkg_estimator.mask], axis=0),
+            s=0.5,
+            vmin=vmin,
+            vmax=vmax,
+        )
+        ax[0].set_aspect("equal")
+        ax[0].set_xlabel("Column Number")
+        ax[0].set_ylabel("Row Number")
+        ax[0].set_title(f"Data Background pixels (frame {frame_index})")
+        plt.colorbar(cbar, ax=ax[0], label="Median Substracted Flux")
+        cbar = ax[1].scatter(
+            self.column,
+            self.row,
+            c=self.bkg_estimator.model[frame_index, self.pixels_in_tpf],
+            s=0.5,
+            vmin=vmin,
+            vmax=vmax,
+        )
+        ax[1].set_aspect("equal")
+        ax[1].set_xlabel("Column Number")
+        ax[1].set_ylabel("Row Number")
+        ax[1].set_title(f"Model Background (all) pixels (frame {frame_index})")
+        plt.colorbar(cbar, ax=ax[1], label="Median Substracted Flux")
+        fig.tight_layout()
+
+        return fig
+
     def fit_lightcurves(
-        self, plot=False, fit_va=True, iter_negative=True, load_shape_model=False
+        self,
+        plot=False,
+        fit_bkg=False,
+        fit_va=True,
+        iter_negative=True,
+        load_shape_model=False,
+        shape_model_file=None,
+        sap=True,
     ):
         """
         Fit the sources inside the TPFs passed to `TPFMachine`.
+        This function creates the `lcs` attribuite that contains a collection of light
+        curves in the form of `lightkurve.LightCurveCollection`. Each entry in the
+        collection is a `lightkurve.KeplerLightCurve` object with the different type
+        of photometry (SAP, PSF, and PSF velocity-aberration corrected). Also each
+        `lightkurve.KeplerLightCurve` object includes its asociated metadata.
+        The photometry can also be accessed independently from the following attribuites
+        that `fit_lightcurves` create:
+            * `ws` and `werrs` have the uncorrected PSF flux and flux errors.
+            * `ws_va` and `werrs_va` have the PSF flux and flux errors corrected by
+            velocity aberration.
+            * `sap_flux` and `sap_flux_err` have the flux and flux errors computed
+            using aperture mask.
 
         Parameters
         ----------
         plot : bool
             Whether or not to show some diagnostic plots. These can be helpful
-            for a user to see if the PRF and time dependent models are being calculated correctly.
+            for a user to see if the PRF and time dependent models are being calculated
+            correctly.
+        fit_bkg : bool
+            Fit and remove background. Useful when providing flux values without
+            background substraction.
         fit_va : bool
             Whether or not to fit Velocity Aberration (which implicitly will try to fit
             other kinds of time variability). This will try to fit the "long term"
@@ -101,18 +284,39 @@ class TPFMachine(Machine):
             find you do not need this to be set to True. If you have the time, it
             is recommended to run it.
         iter_negative : bool
-            When fitting light curves, it isn't possible to force the flux to be positive.
-            As such, when we find there are light curves that deviate into negative
-            flux values, we can clip these targets out of the analysis and rerun the model.
+            When fitting light curves, it isn't possible to force the flux to be
+            positive.
+            As such, when we find there are light curves that deviate into negative flux
+            values, we can clip these targets out of the analysis and rerun the model.
             If iter_negative is True, PSFmachine will run up to 3 times, clipping out
             any negative targets each round.
+        load_shape_model : bool
+            Load PRF shape model from disk or not. Default models were computed from
+            FFI of the same channel and quarter.
+        shape_model_file : string
+            Path to PRF model file to be passed to `load_shape_model(input)`. If None,
+            then precomputed models will be download from Zenodo repo.
+        sap : boolean
+            Compute or not Simple Aperture Photometry. See
+            `Machine.compute_aperture_photometry()` for details.
         """
+        # fit background
+        if fit_bkg:
+            self.remove_background_model(plot=plot)
+
         # use PRF model from FFI or create one with TPF data
         if load_shape_model:
-            self.load_shape_model(plot=plot)
+            self.load_shape_model(input=shape_model_file, plot=plot)
         else:
             self.build_shape_model(plot=plot)
-        self.build_time_model(plot=plot)
+        # sap photometry is independent of the time model and fitting the PSF model.
+        # it only uses the shape mean_model
+        if sap:
+            self.compute_aperture_photometry(
+                aperture_size="optimal", target_complete=1, target_crowd=1
+            )
+        if fit_va:
+            self.build_time_model(plot=plot)
         self.fit_model(fit_va=fit_va)
         if iter_negative:
             # More than 2% negative cadences
@@ -128,51 +332,8 @@ class TPFMachine(Machine):
 
         self.lcs = []
         for idx, s in self.sources.iterrows():
-            ldx = np.where([idx in s for s in self.tpf_meta["sources"]])[0][0]
-            mission = self.tpf_meta["mission"][ldx].lower()
-            if s.tpf_id is not None:
-                if mission == "kepler":
-                    label, targetid = f"KIC {int(s.tpf_id)}", int(s.tpf_id)
-                elif mission == "tess":
-                    label, targetid = f"TIC {int(s.tpf_id)}", int(s.tpf_id)
-                elif mission in ["k2", "ktwo"]:
-                    label, targetid = f"EPIC {int(s.tpf_id)}", int(s.tpf_id)
-                else:
-                    raise ValueError(f"can not parse mission `{mission}`")
-            else:
-                label, targetid = s.designation, int(s.designation.split(" ")[-1])
 
-            meta = {
-                "ORIGIN": "PSFMACHINE",
-                "APERTURE": "PSF",
-                "LABEL": label,
-                "TARGETID": targetid,
-                "MISSION": mission,
-                "RA": s.ra,
-                "DEC": s.dec,
-                "PMRA": s.pmra / 1000,
-                "PMDEC": s.pmdec / 1000,
-                "PARALLAX": s.parallax,
-                "GMAG": s.phot_g_mean_mag,
-                "RPMAG": s.phot_rp_mean_mag,
-                "BPMAG": s.phot_bp_mean_mag,
-            }
-
-            attrs = [
-                "channel",
-                "module",
-                "ccd",
-                "camera",
-                "quarter",
-                "campaign",
-                "quarter",
-                "row",
-                "column",
-                "mission",
-            ]
-            for attr in attrs:
-                if attr in self.tpf_meta.keys():
-                    meta[attr.upper()] = self.tpf_meta[attr][ldx]
+            meta = self._make_meta_dict(idx, s, sap)
 
             if fit_va:
                 flux, flux_err = (
@@ -191,19 +352,88 @@ class TPFMachine(Machine):
                 meta=meta,
                 time_format="jd",
             )
+
             if fit_va:
-                lc["flux_NVA"] = (self.ws[:, idx]) * u.electron / u.second
-                lc["flux_err_NVA"] = (self.werrs[:, idx]) * u.electron / u.second
+                lc["psf_flux_NVA"] = (self.ws[:, idx]) * u.electron / u.second
+                lc["psf_flux_err_NVA"] = (self.werrs[:, idx]) * u.electron / u.second
+            if sap:
+                lc["sap_flux"] = (self.sap_flux[:, idx]) * u.electron / u.second
+                lc["sap_flux_err"] = (self.sap_flux_err[:, idx]) * u.electron / u.second
             self.lcs.append(lc)
-            self.lcs = lk.LightCurveCollection(self.lcs)
+        self.lcs = lk.LightCurveCollection(self.lcs)
         return
+
+    def _make_meta_dict(self, idx, s, sap):
+        """
+        Auxiliar function that creates dictionarywith metadata for a given source in
+        the catalog.
+
+        Parameters
+        ----------
+        idx : int
+            Source index.
+        s : pandas.Series
+            Row entry of the source in the source catalog.
+        sap : boolean
+            Add or not Simple Aperture Photometry metadata
+        """
+        ldx = np.where([idx in s for s in self.tpf_meta["sources"]])[0][0]
+        mission = self.tpf_meta["mission"][ldx].lower()
+        if s.tpf_id is not None:
+            if mission == "kepler":
+                label, targetid = f"KIC {int(s.tpf_id)}", int(s.tpf_id)
+            elif mission == "tess":
+                label, targetid = f"TIC {int(s.tpf_id)}", int(s.tpf_id)
+            elif mission in ["k2", "ktwo"]:
+                label, targetid = f"EPIC {int(s.tpf_id)}", int(s.tpf_id)
+            else:
+                raise ValueError(f"can not parse mission `{mission}`")
+        else:
+            label, targetid = s.designation, int(s.designation.split(" ")[-1])
+
+        meta = {
+            "ORIGIN": "PSFMACHINE",
+            "APERTURE": "PSF + SAP" if sap else "PSF",
+            "LABEL": label,
+            "TARGETID": targetid,
+            "MISSION": mission,
+            "RA": s.ra,
+            "DEC": s.dec,
+            "PMRA": s.pmra / 1000,
+            "PMDEC": s.pmdec / 1000,
+            "PARALLAX": s.parallax,
+            "GMAG": s.phot_g_mean_mag,
+            "RPMAG": s.phot_rp_mean_mag,
+            "BPMAG": s.phot_bp_mean_mag,
+            "SAP": "optimal" if sap else "None",
+            "FLFRCSAP": self.FLFRCSAP[idx] if sap else np.nan,
+            "CROWDSAP": self.CROWDSAP[idx] if sap else np.nan,
+        }
+
+        attrs = [
+            "channel",
+            "module",
+            "ccd",
+            "camera",
+            "quarter",
+            "campaign",
+            "quarter",
+            "row",
+            "column",
+            "mission",
+        ]
+        for attr in attrs:
+            if attr in self.tpf_meta.keys():
+                meta[attr.upper()] = self.tpf_meta[attr][ldx]
+        return meta
 
     def to_fits():
         """Save all the light curves to fits files."""
         raise NotImplementedError
 
     def lcs_in_tpf(self, tpf_number):
-        """Returns the light curves from a given TPF as a lightkurve.LightCurveCollection.
+        """
+        Returns the light curves from a given TPF as a lightkurve.LightCurveCollection.
 
         Parameters
         ----------
@@ -213,7 +443,7 @@ class TPFMachine(Machine):
         ldx = self.tpf_meta["sources"][tpf_number]
         return lk.LightCurveCollection([self.lcs[l] for l in ldx])
 
-    def plot_tpf(self, tdx):
+    def plot_tpf(self, tdx, sap=True):
         """
         Make a diagnostic plot of a given TPF in the stack
 
@@ -225,9 +455,11 @@ class TPFMachine(Machine):
         ----------
         tdx : int
             Index of the TPF to plot
+        sap : boolean
+            Overplot the pixel mask used for aperture photometry.
         """
         tpf = self.tpfs[tdx]
-        ax_tpf = tpf.plot(scale="log")
+        ax_tpf = tpf.plot(aperture_mask="pipeline" if sap else None)
         sources = self.sources.loc[self.tpf_meta["sources"][tdx]]
 
         img_extent = (
@@ -240,6 +472,16 @@ class TPFMachine(Machine):
         r, c = np.mgrid[: tpf.shape[1], : tpf.shape[2]]
         r += tpf.row
         c += tpf.column
+
+        # create 2D aperture mask for every source, for potting
+        if hasattr(self, "aperture_mask") and sap:
+            aperture_mask_2d = aperture_mask_to_2d(
+                self.tpfs,
+                self.tpf_meta["sources"],
+                self.aperture_mask,
+                self.column,
+                self.row,
+            )
 
         kdx = 0
         for sdx, s in sources.iterrows():
@@ -264,12 +506,37 @@ class TPFMachine(Machine):
                 if np.nansum(mod) == 0:
                     kdx += 1
                     continue
-                _ = plt.subplots(figsize=(10, 3))
+                _ = plt.subplots(figsize=(12, 4))
                 ax = plt.subplot2grid((1, 4), (0, 0), colspan=3)
                 lc.errorbar(ax=ax, c="k", lw=0.3, ls="-")
+                # plot SAP lc
+                if hasattr(lc, "sap_flux") and sap:
+                    lc.errorbar(
+                        column="sap_flux",
+                        ax=ax,
+                        c="tab:red",
+                        lw=0.3,
+                        ls="-",
+                        label="SAP",
+                    )
                 kdx += 1
                 ax = plt.subplot2grid((1, 4), (0, 3))
                 lk.utils.plot_image(mod, extent=img_extent, ax=ax)
+                # Overlay the aperture mask if asked
+                if sap:
+                    aperture_mask = aperture_mask_2d["%i_%i" % (tdx, sdx)]
+                    for i in range(r.shape[0]):
+                        for j in range(r.shape[1]):
+                            if aperture_mask[i, j]:
+                                rect = patches.Rectangle(
+                                    xy=(j + tpf.column - 0.5, i + tpf.row - 0.5),
+                                    width=1,
+                                    height=1,
+                                    color="tab:red",
+                                    fill=False,
+                                    hatch="//",
+                                )
+                                ax.add_patch(rect)
             col, row = tpf.wcs.all_world2pix([[s.ra, s.dec]], 0)[0]
             if (
                 (col < -3)
@@ -296,18 +563,48 @@ class TPFMachine(Machine):
         input : string
             Name of the file containing the shape parameters and weights. The file
             has to be FITS format.
+            If None, then previously computed shape model from Kepler's FFI will be
+            download from https://zenodo.org/record/5504503/ and used as default.
+            The file download from Zenodo happens only the first time that shape models
+            of a given mission (e.g. Kepler, K2) are asked. Then, shape models for all
+            channels and quarters will be locally available for future use.
+            The file is stored in `psfmachine/src/psfmachine/data/`.
         plot : boolean
             Plot or not the mean model.
         """
         # By default we will load PRF model from FFI when this are ok.
-        # for now this function only works when a file is provided
         if input is None:
-            raise NotImplementedError(
-                "Loading default model not implemented. Please provide input file."
+            input = (
+                f"{PACKAGEDIR}/data/ffi/ch{self.tpf_meta['channel'][0]:02}/"
+                f"{self.tpf_meta['mission'][0]}_ffi_shape_model_"
+                f"ch{self.tpf_meta['channel'][0]:02}_"
+                f"q{self.tpf_meta['quarter'][0]:02}.fits"
             )
+            if not os.path.isfile(input):
+                # if file doesnt exist, download file bundle from zenodo:
+                tar_file = (
+                    f"{PACKAGEDIR}/data/"
+                    f"{self.tpf_meta['mission'][0]}_FFI_PRFmodels_v1.0.tar.gz"
+                )
+                if not os.path.isfile(tar_file):
+                    if not os.path.isdir(f"{PACKAGEDIR}/data/"):
+                        os.makedirs(f"{PACKAGEDIR}/data/")
+                    url = (
+                        f"https://zenodo.org/record/5504503/files/"
+                        f"{tar_file.split('/')[-1]}?download=1"
+                    )
+                    log.info(f"Downloading bundle files from: {url}")
+                    with urllib.request.urlopen(url) as response, open(
+                        tar_file, "wb"
+                    ) as out_file:
+                        out_file.write(response.read())
+                # unpack
+                with tarfile.open(tar_file) as f:
+                    f.extractall(f"{PACKAGEDIR}/data/ffi/")
         # check if file exists and is the right format
         if not os.path.isfile(input):
-            raise FileNotFoundError("No shape file: %s" % input)
+            raise FileNotFoundError(f"No shape file: {input}")
+        log.info(f"Using shape model from: {input}")
         if not input.endswith(".fits"):
             # should use a custom exception for wrong file format
             raise ValueError("File format not suported. Please provide a FITS file.")
@@ -357,7 +654,8 @@ class TPFMachine(Machine):
         return
 
     def save_shape_model(self, output=None):
-        """Saves the weights of a PRF fit to a file
+        """Saves the weights of a PRF fit to disk as a FITS file.
+
         Parameters
         ----------
         output : str, None
@@ -407,6 +705,97 @@ class TPFMachine(Machine):
 
         return
 
+    def get_source_centroids(self, method="poscor"):
+        """
+        Compute centroids for sources in pixel coordinates.
+        It implements three different methods to calculate centroids:
+            * "aperture": computes centroids from moments `
+            Machine.estimate_source_centroids_aperture()`. This needs the aperture
+            masks to becomputed in advance with `Machine.compute_aperture_photometry`.
+            Note that for sources with partial data (i.e. near TPF edges) the this
+            method is illdefined.
+            * "poscor": uses Gaia RA and Dec coordinates converted to pixel
+            space using the TPFs WCS solution and the apply each TPF 'pos_corr'
+            correction
+            * "scene": uses Gaia coordinates again, but correction is computed from
+            the TPF scene jitter using 'Machine._get_centroids()'.
+
+        Parameters
+        ----------
+        method : string
+            What type of corrected centroid will be computed.
+            If "aperture", it creates attributes `source_centroids_[column/row]_ap`.
+            If "poscor" (default), it creates attributes
+            `source_centroids_[column/row]_poscor`.
+            If "scene", it creates attributes `source_centroids_[column/row]_scene`.
+
+            Note: "poscor" and "scene" show consistent results below 10th of a pixel.
+        """
+        # use aperture mask for moments centroids
+        if method == "aperture":
+            if not hasattr(self, "aperture_mask"):
+                raise AttributeError("No aperture masks")
+            centroids = estimate_source_centroids_aperture(
+                self.aperture_mask, self.flux, self.column, self.row
+            )
+            self.source_centroids_column_ap = centroids[0] * u.pixel
+            self.source_centroids_row_ap = centroids[1] * u.pixel
+        # source centroids using pos_corr
+        if method == "poscor":
+            # get pixel coord from catalog RA, Dec and tpf WCS solution
+            col, row = (
+                self.tpfs[0]
+                .wcs.all_world2pix(self.sources.loc[:, ["ra", "dec"]].values, 0)
+                .T
+            )
+            col += self.tpfs[0].column
+            row += self.tpfs[0].row
+
+            cadno_index = np.in1d(self.tpfs[0].time.jd, self.time)
+            self.source_centroids_column_poscor = []
+            self.source_centroids_row_poscor = []
+            for i in range(self.nsources):
+                tpf_idx = [
+                    k for k, ss in enumerate(self.tpf_meta["sources"]) if i in ss
+                ][0]
+                # apply poss_corr from TPF cadences
+                self.source_centroids_column_poscor.append(
+                    col[i] + self.tpfs[tpf_idx].pos_corr1[cadno_index]
+                )
+                self.source_centroids_row_poscor.append(
+                    row[i] + self.tpfs[tpf_idx].pos_corr2[cadno_index]
+                )
+            self.source_centroids_column_poscor = (
+                np.array(self.source_centroids_column_poscor) * u.pixel
+            )
+            self.source_centroids_row_poscor = (
+                np.array(self.source_centroids_row_poscor) * u.pixel
+            )
+        # use gaia coordinates and scene centroids
+        if method == "scene":
+            if not hasattr(self, "ra_centroid"):
+                self._get_source_mask()
+            centr_ra = np.tile(self.sources.ra.values, (self.nt, 1)).T + np.tile(
+                self.ra_centroid.value, (self.nsources, 1)
+            )
+            centr_dec = np.tile(self.sources.dec.values, (self.nt, 1)).T + np.tile(
+                self.dec_centroid.value, (self.nsources, 1)
+            )
+
+            self.source_centroids_column_scene, self.source_centroids_row_scene = (
+                self.tpfs[0]
+                .wcs.all_world2pix(np.array([centr_ra.ravel(), centr_dec.ravel()]).T, 0)
+                .T
+            )
+            self.source_centroids_column_scene = (
+                self.source_centroids_column_scene.reshape(self.nsources, self.nt)
+                + self.tpfs[0].column
+            ) * u.pixel
+            self.source_centroids_row_scene = (
+                self.source_centroids_row_scene.reshape(self.nsources, self.nt)
+                + self.tpfs[0].row
+            ) * u.pixel
+
     @staticmethod
     def from_TPFs(
         tpfs,
@@ -414,6 +803,7 @@ class TPFMachine(Machine):
         dr=2,
         time_mask=None,
         apply_focus_mask=True,
+        renormalize_tpf_bkg=False,
         query_ra=None,
         query_dec=None,
         query_rad=None,
@@ -463,7 +853,8 @@ class TPFMachine(Machine):
         if not isinstance(tpfs, lk.collections.TargetPixelFileCollection):
             raise TypeError("<tpfs> must be a of class Target Pixel Collection")
 
-        # CH: all these internal functions should be put in another and from_tpfs should be in another helper module
+        # CH: all these internal functions should be put in another and from_tpfs
+        # should be in another helper module
         attrs = [
             "ra",
             "dec",
@@ -503,15 +894,15 @@ class TPFMachine(Machine):
             times,
             flux,
             flux_err,
-            #            pos_corr1,
-            #            pos_corr2,
+            pos_corr1,
+            pos_corr2,
             column,
             row,
             unw,
             focus_mask,
             qual_mask,
             saturated_mask,
-        ) = _parse_TPFs(tpfs, **kwargs)
+        ) = _parse_TPFs(tpfs, renormalize_tpf_bkg=renormalize_tpf_bkg, **kwargs)
 
         if time_mask is not None:
             time_mask = np.copy(time_mask)[qual_mask]
@@ -525,8 +916,8 @@ class TPFMachine(Machine):
         (
             flux,
             flux_err,
-            #            pos_corr1,
-            #            pos_corr2,
+            # pos_corr1,
+            # pos_corr2,
             unw,
             locs,
             ra,
@@ -536,7 +927,8 @@ class TPFMachine(Machine):
         ) = _preprocess(
             flux,
             flux_err,
-            # pos_corr1, pos_corr2,
+            # pos_corr1,
+            # pos_corr2,
             unw,
             locs,
             ra,
@@ -604,15 +996,16 @@ class TPFMachine(Machine):
             row=row,
             pix2obs=unw,
             focus_mask=focus_mask,
-            #            pos_corr1=pos_corr1,
-            #            pos_corr2=pos_corr2,
+            pos_corr1=pos_corr1,
+            pos_corr2=pos_corr2,
             tpf_meta=tpf_meta,
             time_mask=time_mask,
+            bkg_substracted=not renormalize_tpf_bkg,
             **kwargs,
         )
 
 
-def _parse_TPFs(tpfs, **kwargs):
+def _parse_TPFs(tpfs, renormalize_tpf_bkg=True, **kwargs):
     """
     Parse TPF collection to extract times, pixel fluxes, flux errors and tpf-index
     per pixel
@@ -686,38 +1079,29 @@ def _parse_TPFs(tpfs, **kwargs):
     flux_err = np.hstack(
         [np.hstack(tpf.flux_err[qual_mask].transpose([2, 0, 1])) for tpf in tpfs]
     )
+    if renormalize_tpf_bkg:
+        flux_bkg = np.hstack(
+            [np.hstack(tpf.flux_bkg[qual_mask].transpose([2, 0, 1])) for tpf in tpfs]
+        )
+        flux += flux_bkg
 
     sat_mask = []
     for tpf in tpfs:
         # Keplerish saturation limit
-        saturated = np.nanmax(tpf.flux, axis=0).T.value > 1.4e5
-        saturated = np.hstack(
-            (np.gradient(saturated.astype(float))[1] != 0) | saturated
-        )
+        saturated = np.nanmax(tpf.flux, axis=0).T.value > 1.2e5
+        # add 3 pixels before and after bleed column to be generous
+        for k in range(3):
+            saturated = (np.gradient(saturated.astype(float))[1] != 0) | saturated
+        saturated = np.hstack(saturated)
         sat_mask.append(np.hstack(saturated))
     sat_mask = np.hstack(sat_mask)
-    # pos_corr1 = np.hstack(
-    #     [
-    #         np.hstack(
-    #             (
-    #                 tpf.pos_corr1[qual_mask][:, None, None]
-    #                 * np.ones(tpf.flux.shape[1:])[None, :, :]
-    #             ).transpose([2, 0, 1])
-    #         )
-    #         for tpf in tpfs
-    #     ]
-    # )
-    # pos_corr2 = np.hstack(
-    #     [
-    #         np.hstack(
-    #             (
-    #                 tpf.pos_corr2[qual_mask][:, None, None]
-    #                 * np.ones(tpf.flux.shape[1:])[None, :, :]
-    #             ).transpose([2, 0, 1])
-    #         )
-    #         for tpf in tpfs
-    #     ]
-    # )
+    pos_corr1, pos_corr2 = np.swapaxes(
+        np.array(
+            [np.vstack([x.pos_corr1[qual_mask], x.pos_corr2[qual_mask]]) for x in tpfs]
+        ),
+        0,
+        1,
+    )
     unw = np.hstack(
         [
             np.zeros((tpf.shape[1] * tpf.shape[2]), dtype=int) + idx
@@ -728,8 +1112,8 @@ def _parse_TPFs(tpfs, **kwargs):
         times,
         flux,
         flux_err,
-        #        pos_corr1,
-        #        pos_corr2,
+        pos_corr1,
+        pos_corr2,
         column,
         row,
         unw,
@@ -742,8 +1126,6 @@ def _parse_TPFs(tpfs, **kwargs):
 def _preprocess(
     flux,
     flux_err,
-    #    pos_corr1,
-    #    pos_corr2,
     unw,
     locs,
     ra,
@@ -767,8 +1149,8 @@ def _preprocess(
         # Find bad pixels, including allowence for a bleed column.
         bad_pixels = np.vstack(
             [
-                np.hstack([column[saturated] + idx for idx in np.arange(-3, 3)]),
-                np.hstack([row[saturated] for idx in np.arange(-3, 3)]),
+                np.hstack([column[saturated] + idx for idx in np.arange(-1, 1)]),
+                np.hstack([row[saturated] for idx in np.arange(-1, 1)]),
             ]
         ).T
         # Find unique row/column combinations
@@ -786,14 +1168,9 @@ def _preprocess(
     flux = np.asarray(flux)
     flux_err = np.asarray(flux_err)
 
-    # Finite pixels
+    # Finite and non-saturated pixels
     not_nan = np.isfinite(flux).all(axis=0)
-    # Unique Pixels
-    _, unique_pix = np.unique(locs, axis=1, return_index=True)
-    unique_pix = np.in1d(np.arange(len(ra)), unique_pix)
-    # No saturation and bleed columns
-
-    mask = not_nan & unique_pix & ~saturated
+    mask = not_nan & ~saturated
 
     locs = locs[:, mask]
     column = column[mask]
@@ -802,11 +1179,22 @@ def _preprocess(
     dec = dec[mask]
     flux = flux[:, mask]
     flux_err = flux_err[:, mask]
-    #    pos_corr1 = pos_corr1[:, mask]
-    #    pos_corr2 = pos_corr2[:, mask]
     unw = unw[mask]
 
-    return (flux, flux_err, unw, locs, ra, dec, column, row)  # pos_corr1, pos_corr2,
+    # Unique Pixels
+    _, unique_pix = np.unique(locs, axis=1, return_index=True)
+    unique_pix = np.in1d(np.arange(len(ra)), unique_pix)
+
+    locs = locs[:, unique_pix]
+    column = column[unique_pix]
+    row = row[unique_pix]
+    ra = ra[unique_pix]
+    dec = dec[unique_pix]
+    flux = flux[:, unique_pix]
+    flux_err = flux_err[:, unique_pix]
+    unw = unw[unique_pix]
+
+    return (flux, flux_err, unw, locs, ra, dec, column, row)
 
 
 def _wcs_from_tpfs(tpfs):
@@ -918,7 +1306,7 @@ def _get_coord_and_query_gaia(
     return sources
 
 
-def _clean_source_list(sources, ra, dec):
+def _clean_source_list(sources, ra, dec, pixel_tolerance=4):
     """
     Removes sources that are too contaminated and/or off the edge of the image
 
@@ -945,7 +1333,7 @@ def _clean_source_list(sources, ra, dec):
     inside = np.zeros(len(sources), dtype=bool)
     # max distance in arcsec from image edge to source ra, dec
     # 4 pixels
-    sep = 4 * 4 * u.arcsec.to(u.deg)
+    sep = pixel_tolerance * 4 * u.arcsec.to(u.deg)
     for k in range(len(sources)):
         raok = (sources["ra"][k] > ra - sep) & (sources["ra"][k] < ra + sep)
         decok = (sources["dec"][k] > dec - sep) & (sources["dec"][k] < dec + sep)
