@@ -120,23 +120,41 @@ def test_compute_aperture_photometry():
 @pytest.mark.remote_data
 def test_poscorr_smooth():
     machine = TPFMachine.from_TPFs(tpfs, apply_focus_mask=False)
-    machine._get_source_mask()
-    machine.poscorr_filter_size = 0.4
-    (
-        time_original,
-        time_binned,
-        flux_binned_raw,
-        flux_binned,
-        flux_err_binned,
-        poscorr1_smooth,
-        poscorr2_smooth,
-        poscorr1_binned,
-        poscorr2_binned,
-    ) = machine._time_bin(npoints=100)
+    machine.build_shape_model(plot=False)
+    # no segments
+    machine.poscorr_filter_size = 1
+    machine.build_time_model(
+        segments=False, bin_method="bin", focus=False, positions="poscorr"
+    )
 
-    assert np.isclose(
-        poscorr1_smooth, np.nanmedian(machine.pos_corr1, axis=0), atol=1e-3
-    ).all()
-    assert np.isclose(
-        poscorr2_smooth, np.nanmedian(machine.pos_corr2, axis=0), atol=1e-3
-    ).all()
+    median_pc1 = np.nanmedian(machine.pos_corr1, axis=0)
+    median_pc2 = np.nanmedian(machine.pos_corr2, axis=0)
+    median_pc1 = (median_pc1 - median_pc1.mean()) / (
+        median_pc1.max() - median_pc1.mean()
+    )
+    median_pc2 = (median_pc2 - median_pc2.mean()) / (
+        median_pc2.max() - median_pc2.mean()
+    )
+
+    assert np.isclose(machine.P.other_vectors[:, 0], median_pc1, atol=0.5).all()
+    assert np.isclose(machine.P.other_vectors[:, 1], median_pc2, atol=0.5).all()
+
+
+@pytest.mark.remote_data
+def test_segment_time_model():
+    # testing segment with the current test dataset we have that only has 10 cadences
+    # isn't the best, but we can still do some sanity checks.
+    machine = TPFMachine.from_TPFs(
+        tpfs, apply_focus_mask=False, time_resolution=3, time_corrector="polynomial"
+    )
+    machine.build_shape_model(plot=False)
+    # no segments
+    machine.build_time_model(segments=False, bin_method="bin", focus=False)
+    assert machine.P.vectors.shape == (10, 4)
+
+    # fake 2 time breaks
+    machine.time[4:] += 0.5
+    machine.time[7:] += 0.41
+    # user defined segments
+    machine.build_time_model(segments=True, bin_method="bin", focus=False)
+    assert machine.P.vectors.shape == (10, 4 * 3)
