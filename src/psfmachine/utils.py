@@ -3,9 +3,11 @@
 import numpy as np
 import pandas as pd
 import diskcache
+import requests
 
 from scipy import sparse
 from patsy import dmatrix
+from scipy.ndimage import gaussian_filter1d
 import pyia
 
 # size_limit is 1GB
@@ -53,45 +55,58 @@ def get_gaia_sources(ras, decs, rads, magnitude_limit=18, epoch=2020, dr=2):
     ]
 
     where = """\n\tOR """.join(wheres)
-    if dr == 2:
-        # CH: We don't need a lot of these columns we could greatly reduce it
-        gd = pyia.GaiaData.from_query(
-            f"""SELECT designation,
-            coord1(prop) AS ra, coord2(prop) AS dec, parallax,
-            parallax_error, pmra, pmdec,
-            phot_g_mean_flux,
-            phot_g_mean_mag,
-            phot_bp_mean_mag,
-            phot_rp_mean_mag FROM (
-     SELECT *,
-     EPOCH_PROP_POS(ra, dec, parallax, pmra, pmdec, 0, ref_epoch, {epoch}) AS prop
-     FROM gaiadr2.gaia_source
-     WHERE {where}
-    )  AS subquery
-    WHERE phot_g_mean_mag<={magnitude_limit}
 
-    """
-        )
-    elif dr == 3:
-        gd = pyia.GaiaData.from_query(
-            f"""SELECT designation,
-            coord1(prop) AS ra, coord2(prop) AS dec, parallax,
-            parallax_error, pmra, pmdec,
-            phot_g_mean_flux,
-            phot_g_mean_mag,
-            phot_bp_mean_mag,
-            phot_rp_mean_mag FROM (
-             SELECT *,
-             EPOCH_PROP_POS(ra, dec, parallax, pmra, pmdec, 0, ref_epoch, {epoch}) AS prop
-             FROM gaiaedr3.gaia_source
-             WHERE {where}
-            )  AS subquery
-            WHERE phot_g_mean_mag<={magnitude_limit}
-            """
-        )
+    internet = True
+    try:
+        _ = requests.get("https://gea.esac.esa.int/archive/", timeout=5)
+    except (requests.ConnectionError, requests.Timeout):
+        internet = False
+        # print("No internet connection")
+
+    if internet:
+        if dr == 2:
+            # CH: We don't need a lot of these columns we could greatly reduce it
+            gd = pyia.GaiaData.from_query(
+                f"""SELECT designation,
+                coord1(prop) AS ra, coord2(prop) AS dec, parallax,
+                parallax_error, pmra, pmdec,
+                phot_g_mean_flux,
+                phot_g_mean_mag,
+                phot_bp_mean_mag,
+                phot_rp_mean_mag FROM (
+         SELECT *,
+         EPOCH_PROP_POS(ra, dec, parallax, pmra, pmdec, 0, ref_epoch, {epoch}) AS prop
+         FROM gaiadr2.gaia_source
+         WHERE {where}
+        )  AS subquery
+        WHERE phot_g_mean_mag<={magnitude_limit}
+
+        """
+            )
+        elif dr == 3:
+            gd = pyia.GaiaData.from_query(
+                f"""SELECT designation,
+                coord1(prop) AS ra, coord2(prop) AS dec, parallax,
+                parallax_error, pmra, pmdec,
+                phot_g_mean_flux,
+                phot_g_mean_mag,
+                phot_bp_mean_mag,
+                phot_rp_mean_mag FROM (
+                 SELECT *,
+                 EPOCH_PROP_POS(ra, dec, parallax, pmra, pmdec, 0, ref_epoch, {epoch}) AS prop
+                 FROM gaiaedr3.gaia_source
+                 WHERE {where}
+                )  AS subquery
+                WHERE phot_g_mean_mag<={magnitude_limit}
+                """
+            )
+        else:
+            raise ValueError("Please pass a valid data release")
+        return gd.data.to_pandas()
     else:
-        raise ValueError("Please pass a valid data release")
-    return gd.data.to_pandas()
+        from .nas_utils import query_local_db
+
+        return query_local_db(ras, decs, rads, magnitude_limit=magnitude_limit)
 
 
 def do_tiled_query(ra, dec, ngrid=(5, 5), magnitude_limit=18, epoch=2020, dr=3):
@@ -196,33 +211,31 @@ def _make_A_polar(phi, r, cut_r=6, rmin=1, rmax=18, n_r_knots=12, n_phi_knots=15
     return X1
 
 
-def _make_A_cartesian(x, y, n_knots=10, radius=3.0, spacing="sqrt"):
-    if spacing == "sqrt":
-        x_knots = np.linspace(-np.sqrt(radius), np.sqrt(radius), n_knots)
-        x_knots = np.sign(x_knots) * x_knots ** 2
-    else:
-        x_knots = np.linspace(-radius, radius, n_knots)
-    x_spline = sparse.csr_matrix(
+def spline1d(x, knots, degree=3):
+    """Make a spline in a 1D variable `x`"""
+    X = sparse.csr_matrix(
         np.asarray(
             dmatrix(
-                "bs(x, knots=knots, degree=3, include_intercept=True)",
-                {"x": list(x), "knots": x_knots},
+                "bs(x, knots=knots, degree=degree, include_intercept=True)",
+                {"x": list(x), "knots": knots, "degree": degree},
             )
         )
     )
-    if spacing == "sqrt":
-        y_knots = np.linspace(-np.sqrt(radius), np.sqrt(radius), n_knots)
-        y_knots = np.sign(y_knots) * y_knots ** 2
+    if not X.shape[0] == x.shape[0]:
+        raise ValueError("`patsy` has made the wrong matrix.")
+    X = X[:, np.asarray(X.sum(axis=0) != 0)[0]]
+    return X
+
+
+def _make_A_cartesian(x, y, n_knots=10, radius=3.0, knot_spacing_type="sqrt", degree=3):
+    if knot_spacing_type == "sqrt":
+        knots = np.linspace(-np.sqrt(radius), np.sqrt(radius), n_knots)
+        knots = np.sign(knots) * knots ** 2
     else:
-        y_knots = np.linspace(-radius, radius, n_knots)
-    y_spline = sparse.csr_matrix(
-        np.asarray(
-            dmatrix(
-                "bs(x, knots=knots, degree=3, include_intercept=True)",
-                {"x": list(y), "knots": y_knots},
-            )
-        )
-    )
+        knots = np.linspace(-radius, radius, n_knots)
+    x_spline = spline1d(x, knots=knots, degree=degree)
+    y_spline = spline1d(y, knots=knots, degree=degree)
+
     X = sparse.hstack(
         [x_spline.multiply(y_spline[:, idx]) for idx in range(y_spline.shape[1])],
         format="csr",
@@ -544,7 +557,7 @@ def threshold_bin(x, y, z, z_err=None, abs_thresh=10, bins=15, statistic=np.nanm
     )
 
 
-def get_breaks(time):
+def get_breaks(time, include_ext=False):
     """
     Finds discontinuity in the time array and return the break indexes.
 
@@ -559,4 +572,147 @@ def get_breaks(time):
         An array of indexes with the break positions
     """
     dts = np.diff(time)
-    return np.hstack([0, np.where(dts > 5 * np.median(dts))[0] + 1, len(time)])
+    if include_ext:
+        return np.hstack([0, np.where(dts > 5 * np.median(dts))[0] + 1, len(time)])
+    else:
+        return np.where(dts > 5 * np.median(dts))[0] + 1
+
+
+def gaussian_smooth(
+    y, x=None, do_segments=False, filter_size=13, mode="mirror", breaks=None
+):
+    """
+    Applies a Gaussian smoothing to a curve.
+
+    Parameters
+    ----------
+    y : numpy.ndarray or list of numpy.ndarray
+        Arrays to be smoothen in the last axis
+    x : numpy.ndarray
+        Time array of same shape of `y` last axis used to find data discontinuity.
+    filter_size : int
+        Filter window size
+    mode : str
+        The `mode` parameter determines how the input array is extended
+        beyond its boundaries. Options are {'reflect', 'constant', 'nearest', 'mirror',
+        'wrap'}. Default is 'mirror'
+
+    Returns
+    -------
+    y_smooth : numpy.ndarray
+        Smooth array.
+    """
+    if isinstance(y, list):
+        y = np.asarray(y)
+    else:
+        y = np.atleast_2d(y)
+
+    if do_segments:
+        if breaks is None and x is None:
+            raise ValueError("Please provide `x` or `breaks` to have splits.")
+        elif breaks is None and x is not None:
+            splits = get_breaks(x, include_ext=True)
+        else:
+            splits = np.array(breaks)
+        # find discontinuity in y according to x if provided
+        if x is not None:
+            grads = np.gradient(y, x, axis=1)
+            # the 7-sigma here is hardcoded and found to work ok
+            splits = np.unique(
+                np.concatenate(
+                    [splits, np.hstack([np.where(g > 7 * g.std())[0] for g in grads])]
+                )
+            )
+    else:
+        splits = [0, y.shape[-1]]
+
+    y_smooth = []
+    for i in range(1, len(splits)):
+        y_smooth.append(
+            gaussian_filter1d(
+                y[:, splits[i - 1] : splits[i]],
+                filter_size,
+                mode=mode,
+                axis=1,
+            )
+        )
+    return np.hstack(y_smooth)
+
+
+def bspline_smooth(y, x=None, degree=3, do_segments=False, breaks=None, n_knots=100):
+    """
+    Applies a spline smoothing to a curve.
+
+    Parameters
+    ----------
+    y : numpy.ndarray or list of numpy.ndarray
+        Arrays to be smoothen in the last axis
+    x : numpy.ndarray
+        Optional. x array, as `y = f(x)`` used to find discontinuities in `f(x)`. If x
+        is given then splits will be computed, if not `breaks` argument as to be provided.
+    degree : int
+        Degree of the psline fit, default is 3.
+    do_segments : boolean
+        Do the splines per segments with splits computed from data `x` or given in `breaks`.
+    breaks : list of ints
+        List of break indexes in `y`.
+    nknots : int
+        Number of knots for the B-Spline. If `do_segments` is True, knots will be
+        distributed in each segment.
+
+    Returns
+    -------
+    y_smooth : numpy.ndarray
+        Smooth array.
+    """
+    if isinstance(y, list):
+        y = np.asarray(y)
+    else:
+        y = np.atleast_2d(y)
+
+    if do_segments:
+        if breaks is None and x is None:
+            raise ValueError("Please provide `x` or `breaks` to have splits.")
+        elif breaks is None and x is not None:
+            splits = get_breaks(x)
+        else:
+            splits = np.array(breaks)
+        # find discontinuity in y according to x if provided
+        if x is not None:
+            grads = np.gradient(y, x, axis=1)
+            # the 7-sigma here is hardcoded and found to work ok
+            splits = np.unique(
+                np.concatenate(
+                    [splits, np.hstack([np.where(g > 7 * g.std())[0] for g in grads])]
+                )
+            )
+    else:
+        splits = [0, y.shape[-1]]
+
+    def spline(v):
+        knots = np.linspace(v.min(), v.max(), n_knots)
+        DM = np.asarray(
+            dmatrix(
+                "bs(x, knots=knots, degree=2, include_intercept=True)",
+                {"x": list(v), "knots": knots},
+            )
+        )
+        x = np.array_split(np.arange(len(v)), splits)
+        masks = np.asarray([np.in1d(np.arange(len(v)), x1).astype(float) for x1 in x]).T
+        DM = np.hstack([DM[:, idx][:, None] * masks for idx in range(DM.shape[1])])
+        return DM
+
+    y_smooth = []
+    DM = spline(np.arange(y.shape[-1]))
+    prior_mu = np.zeros(DM.shape[1])
+    prior_sigma = np.ones(DM.shape[1]) * 1e5
+    # iterate over vectors in y
+    for v in range(y.shape[0]):
+        weights = solve_linear_model(
+            DM,
+            y[v],
+            prior_mu=prior_mu,
+            prior_sigma=prior_sigma,
+        )
+        y_smooth.append(DM.dot(weights))
+    return np.array(y_smooth)

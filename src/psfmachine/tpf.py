@@ -6,6 +6,7 @@ import lightkurve as lk
 from astropy.coordinates import SkyCoord, match_coordinates_sky
 from astropy.time import Time
 from astropy.io import fits
+from astropy.stats import sigma_clip
 import astropy.units as u
 import matplotlib.pyplot as plt
 from matplotlib import patches
@@ -41,8 +42,8 @@ class TPFMachine(Machine):
         time_mask=None,
         n_r_knots=10,
         n_phi_knots=15,
-        n_time_knots=10,
-        n_time_points=200,
+        time_nknots=10,
+        time_resolution=200,
         time_radius=8,
         rmin=1,
         rmax=16,
@@ -53,7 +54,7 @@ class TPFMachine(Machine):
         tpf_meta=None,
         time_corrector="pos_corr",
         cartesian_knot_spacing="sqrt",
-        bkg_substracted=True,
+        bkg_subtracted=True,
     ):
         super().__init__(
             time=time,
@@ -67,8 +68,8 @@ class TPFMachine(Machine):
             limit_radius=limit_radius,
             n_r_knots=n_r_knots,
             n_phi_knots=n_phi_knots,
-            n_time_knots=n_time_knots,
-            n_time_points=n_time_points,
+            time_nknots=time_nknots,
+            time_resolution=time_resolution,
             time_radius=time_radius,
             rmin=rmin,
             rmax=rmax,
@@ -94,7 +95,7 @@ class TPFMachine(Machine):
         self.tpf_meta = tpf_meta
         self.time_corrector = time_corrector
         self.cartesian_knot_spacing = cartesian_knot_spacing
-        self.bkg_substracted = bkg_substracted
+        self.bkg_subtracted = bkg_subtracted
 
     def __repr__(self):
         return f"TPFMachine (N sources, N times, N pixels): {self.shape}"
@@ -127,8 +128,8 @@ class TPFMachine(Machine):
             keys; "column", "row", and "flux".
         """
         if not self.tpf_meta["mission"][0].lower() in ["kepler", "k2", "ktwo"]:
-            log.info(
-                "Warning: Background fitting is a Kepler only tool, "
+            log.warning(
+                "Background fitting is a Kepler only tool, "
                 "then no background model will be fitted."
             )
             return
@@ -142,6 +143,21 @@ class TPFMachine(Machine):
         bkg_flux = self.flux
         # keep track of which pixels comes from TPFs
         pixels_in_tpf = np.ones_like(self.row, dtype=bool)
+
+        # enheance pixel mask
+        time_corr = np.nanpercentile(bkg_flux, 20, axis=1)[:, None]
+        med_flux = np.median(bkg_flux - time_corr, axis=0)[None, :]
+
+        f = bkg_flux - med_flux
+        f -= np.median(f)
+        # Mask out pixels that are particularly bright.
+        _mask = (f - time_corr).std(axis=0) < 500
+        if not _mask.any():
+            raise ValueError("All the input pixels are brighter than 500 counts.")
+        _mask &= (f - time_corr).std(axis=0) < 30
+        _mask &= ~sigma_clip(med_flux[0]).mask
+        _mask &= ~sigma_clip(np.std(f - time_corr, axis=0)).mask
+        bkg_pixel_mask &= _mask
 
         if data_augment:
             # augment background pixels
@@ -178,16 +194,17 @@ class TPFMachine(Machine):
         )
 
         # remove background when necessary, this is done just once
-        if not self.bkg_substracted:
+        if not self.bkg_subtracted:
             bkg_mask = ~np.asarray(
                 (self.source_mask.todense()).sum(axis=0).astype(bool)
             ).ravel()
             # remove bkg and median value (kbackground fits the median-normalized
             # background)
             self.flux -= self.bkg_estimator.model[:, self.pixels_in_tpf]
-            self.flux -= np.median(self.flux[:, bkg_mask])
+            self.bkg_median_level = np.median(self.flux[:, bkg_mask])
+            self.flux -= self.bkg_median_level
             # set bkg subs flag so this step happens only one time
-            self.bkg_substracted = True
+            self.bkg_subtracted = True
 
         if plot:
             self.bkg_estimator.plot()
@@ -318,16 +335,33 @@ class TPFMachine(Machine):
         if fit_va:
             self.build_time_model(plot=plot)
         self.fit_model(fit_va=fit_va)
+
+        # if iter_negative:
+        #     # More than 2% negative cadences
+        #     negative_sources = (self.ws_va < 0).sum(axis=0) > (0.02 * self.nt)
+        #     idx = 1
+        #     while len(negative_sources) > 0:
+        #         self.mean_model[negative_sources] *= 0
+        #         self.fit_model(fit_va=fit_va)
+        #         negative_sources = np.where((self.ws_va < 0).all(axis=0))[0]
+        #         idx += 1
+        #         if idx >= 3:
+        #             break
+
         if iter_negative:
-            # More than 2% negative cadences
+            count = 1
             negative_sources = (self.ws_va < 0).sum(axis=0) > (0.02 * self.nt)
-            idx = 1
+            prior_sigma = (
+                np.ones(self.mean_model.shape[0])
+                * 5
+                * np.abs(self.source_flux_estimates) ** 0.5
+            )
             while len(negative_sources) > 0:
-                self.mean_model[negative_sources] *= 0
-                self.fit_model(fit_va=fit_va)
+                prior_sigma[negative_sources] /= 2
+                self.fit_model(fit_va=fit_va, prior_sigma=prior_sigma)
                 negative_sources = np.where((self.ws_va < 0).all(axis=0))[0]
-                idx += 1
-                if idx >= 3:
+                count += 1
+                if count >= 3:
                     break
 
         self.lcs = []
@@ -1000,7 +1034,7 @@ class TPFMachine(Machine):
             pos_corr2=pos_corr2,
             tpf_meta=tpf_meta,
             time_mask=time_mask,
-            bkg_substracted=not renormalize_tpf_bkg,
+            bkg_subtracted=not renormalize_tpf_bkg,
             **kwargs,
         )
 
@@ -1033,7 +1067,10 @@ def _parse_TPFs(tpfs, renormalize_tpf_bkg=True, **kwargs):
         qual_mask = lk.utils.KeplerQualityFlags.create_quality_mask(
             tpfs[0].quality, 1 | 2 | 4 | 8 | 32 | 16384 | 65536 | 1048576
         )
-        qual_mask &= (np.abs(tpfs[0].pos_corr1) < 5) & (np.abs(tpfs[0].pos_corr2) < 5)
+        if not np.isnan(tpfs[0].pos_corr1).all():
+            qual_mask &= (np.abs(tpfs[0].pos_corr1) < 5) & (
+                np.abs(tpfs[0].pos_corr2) < 5
+            )
         # Cut out 1.5 days after every data gap
         dt = np.hstack([10, np.diff(time)])
         focus_mask = ~np.in1d(
@@ -1080,10 +1117,24 @@ def _parse_TPFs(tpfs, renormalize_tpf_bkg=True, **kwargs):
         [np.hstack(tpf.flux_err[qual_mask].transpose([2, 0, 1])) for tpf in tpfs]
     )
     if renormalize_tpf_bkg:
-        flux_bkg = np.hstack(
-            [np.hstack(tpf.flux_bkg[qual_mask].transpose([2, 0, 1])) for tpf in tpfs]
-        )
-        flux += flux_bkg
+        # we check if TPF data is bkg subtracted
+        if tpfs[0].mission == "K2":
+            log.warning(
+                "`kbackground` currently does not support K2 data. We recommend setting"
+                " `renormalize_tpf_bkg=False` and use the pipeline background model."
+            )
+        if fits.getheader(tpfs[0].path, ext=1)["BACKAPP"]:
+            flux_bkg = np.hstack(
+                [
+                    np.hstack(tpf.flux_bkg[qual_mask].transpose([2, 0, 1]))
+                    for tpf in tpfs
+                ]
+            )
+            flux += flux_bkg
+        else:
+            log.warning(
+                "TPFs are not background subtracted, will initialize as default."
+            )
 
     sat_mask = []
     for tpf in tpfs:
@@ -1144,7 +1195,7 @@ def _preprocess(
         """Finds and removes saturated pixels, including bleed columns."""
         # Which pixels are saturated
         saturated = np.nanpercentile(flux, 99, axis=0)
-        saturated = np.where((saturated > saturation_limit).astype(float))[0]
+        saturated = np.where((flux > saturation_limit).astype(float))[0]
 
         # Find bad pixels, including allowence for a bleed column.
         bad_pixels = np.vstack(
@@ -1340,10 +1391,27 @@ def _clean_source_list(sources, ra, dec, pixel_tolerance=4):
         inside[k] = (raok & decok).any()
     del raok, decok
 
+    # flagging soures within 1"
+    idx, sep, _ = match_coordinates_sky(
+        SkyCoord(np.asarray(sources[["ra", "dec"]]), unit="deg"),
+        SkyCoord(np.asarray(sources[["ra", "dec"]]), unit="deg"),
+        nthneighbor=2,
+    )
+    match1 = np.where(sep < 1 * u.arcsec)[0]
+    match2 = idx[sep < 1 * u.arcsec]
+    blended_faint = np.ones(sources.shape[0], dtype=bool)
+
+    for a, b in zip(match1, match2):
+        if sources.phot_g_mean_mag[a] >= sources.phot_g_mean_mag[b]:
+            blended_faint[a] = False
+        else:
+            blended_faint[b] = False
+
     # Keep track of sources that we removed
     sources.loc[:, "clean_flag"] = 0
     # to avoid pandas SettingWithCopyWarning
     sources.clean_flag.where(inside, 2 ** 0, inplace=True)
+    sources.clean_flag.where(blended_faint, 2 ** 1, inplace=True)
     # combine 2 source masks
     clean = sources.clean_flag == 0
     removed_sources = sources[~clean].reset_index(drop=True)
