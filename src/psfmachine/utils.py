@@ -2,7 +2,8 @@
 
 import numpy as np
 import pandas as pd
-import diskcache
+
+# import diskcache
 import requests
 
 from scipy import sparse
@@ -11,11 +12,11 @@ from scipy.ndimage import gaussian_filter1d
 import pyia
 
 # size_limit is 1GB
-cache = diskcache.Cache(directory="~/.psfmachine-cache")
+# cache = diskcache.Cache(directory="~/.psfmachine-cache")
 
 
 # cache during 30 days
-@cache.memoize(expire=2.592e06)
+# @cache.memoize(expire=2.592e06)
 def get_gaia_sources(ras, decs, rads, magnitude_limit=18, epoch=2020, dr=2):
     """
     Will find gaia sources using a TAP query, accounting for proper motions.
