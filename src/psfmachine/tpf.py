@@ -1123,7 +1123,7 @@ def _parse_TPFs(tpfs, renormalize_tpf_bkg=True, **kwargs):
                 "`kbackground` currently does not support K2 data. We recommend setting"
                 " `renormalize_tpf_bkg=False` and use the pipeline background model."
             )
-        if fits.getheader(tpfs[0].path, ext=1)["BACKAPP"]:
+        if True:
             flux_bkg = np.hstack(
                 [
                     np.hstack(tpf.flux_bkg[qual_mask].transpose([2, 0, 1]))
