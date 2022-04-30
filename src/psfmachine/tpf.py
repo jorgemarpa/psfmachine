@@ -358,7 +358,6 @@ class TPFMachine(Machine):
             )
             while len(negative_sources) > 0:
                 prior_sigma[negative_sources] /= 2
-                print(np.where(negative_sources), prior_sigma[negative_sources])
                 self.fit_model(fit_va=fit_va, prior_sigma=prior_sigma)
                 negative_sources = np.where((self.ws_va < 0).all(axis=0))[0]
                 count += 1
@@ -1403,7 +1402,6 @@ def _clean_source_list(sources, ra, dec, pixel_tolerance=4):
     blended_faint = np.ones(sources.shape[0], dtype=bool)
 
     for a, b in zip(match1, match2):
-        print(a, b)
         if sources.phot_g_mean_mag[a] >= sources.phot_g_mean_mag[b]:
             blended_faint[a] = False
         else:
