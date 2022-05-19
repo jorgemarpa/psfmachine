@@ -229,7 +229,8 @@ def spline1d(x, knots, degree=3):
 
 
 def _make_A_cartesian(x, y, n_knots=10, radius=3.0, knot_spacing_type="sqrt", degree=3):
-    radius = np.min(np.abs([x.min(), x.max(), y.min(), y.max(), radius]))
+    if radius > np.min(np.abs([x.min(), x.max(), y.min(), y.max()])):
+        radius = np.min(np.abs([x.min(), x.max(), y.min(), y.max()]))
     if knot_spacing_type == "sqrt":
         knots = np.linspace(-np.sqrt(radius), np.sqrt(radius), n_knots)
         knots = np.sign(knots) * knots ** 2
