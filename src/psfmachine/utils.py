@@ -218,7 +218,11 @@ def spline1d(x, knots, degree=3):
         np.asarray(
             dmatrix(
                 "bs(x, knots=knots, degree=degree, include_intercept=True)",
-                {"x": list(x), "knots": knots, "degree": degree},
+                {
+                    "x": np.hstack([knots[0], x, knots[-1]]),
+                    "knots": knots,
+                    "degree": degree,
+                },
             )
         )
     )
