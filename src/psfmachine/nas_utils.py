@@ -8,7 +8,7 @@ from astropy.table import Table
 pd.set_option("mode.chained_assignment", None)
 
 
-def query_local_db(ras, decs, rads, magnitude_limit=18):
+def query_local_db(ras, decs, rads, magnitude_limit=18, dr=3):
     """
     Does a cone search in a local copy of Gaia EDR3 of Kepler Field in case there's no
     internet connection, e.g. when running at NAS because computing nodes do not have
@@ -20,12 +20,19 @@ def query_local_db(ras, decs, rads, magnitude_limit=18):
     else:
         path = "/Users/jorgemarpa/Work/BAERI/ADAP/data/catalogs"
 
-    # open table
-    if magnitude_limit == 18:
-        table = Table.read(f"{path}/kic_x_gaia_edr3_kepler_field_g18.fits").to_pandas()
+    if dr == 1:
+        drs = "dr1"
+    elif dr == 2:
+        drs = "dr2"
+    elif dr == 3:
+        drs = "dr3"
+    elif dr in ["edr3", "EDR3"]:
+        drs = "edr3"
     else:
-        table = Table.read(f"{path}/kic_x_gaia_edr3_kepler_field.fits").to_pandas()
-    # table = Table.read(f"{path}/kic_x_gaia_edr3_kepler_field_bkgd.fits").to_pandas()
+        raise ValueError("Wrong DR")
+
+    # open table
+    table = Table.read(f"{path}/kic_x_gaia_{drs}_kepler_field_bkgd.fits").to_pandas()
 
     # filter sources around TPFs, square approx
     ralim = [np.min(ras) - 0.1, np.max(ras) + 0.1]
