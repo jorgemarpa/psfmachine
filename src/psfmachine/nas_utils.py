@@ -20,19 +20,13 @@ def query_local_db(ras, decs, rads, magnitude_limit=18, dr=3):
     else:
         path = "/Users/jorgemarpa/Work/BAERI/ADAP/data/catalogs"
 
-    if dr == 1:
-        drs = "dr1"
-    elif dr == 2:
-        drs = "dr2"
-    elif dr == 3:
-        drs = "dr3"
-    elif dr in ["edr3", "EDR3"]:
-        drs = "edr3"
-    else:
-        raise ValueError("Wrong DR")
+    if dr not in [1, 2, 3, "edr3", "dr1", "dr2", "dr3"]:
+        raise ValueError("Please pass a valid data release")
+    if isinstance(dr, int):
+        dr = f"dr{dr}"
 
     # open table
-    table = Table.read(f"{path}/kic_x_gaia_{drs}_kepler_field_bkgd.fits").to_pandas()
+    table = Table.read(f"{path}/kic_x_gaia_{dr}_kepler_field_bkgd.fits").to_pandas()
 
     # filter sources around TPFs, square approx
     ralim = [np.min(ras) - 0.1, np.max(ras) + 0.1]
