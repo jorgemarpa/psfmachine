@@ -557,7 +557,6 @@ class TPFMachine(Machine):
                     continue
                 _ = plt.subplots(figsize=(12, 4))
                 ax = plt.subplot2grid((1, 4), (0, 0), colspan=3)
-                lc.errorbar(ax=ax, c="k", lw=0.3, ls="-")
                 # plot SAP lc
                 if hasattr(lc, "sap_flux") and sap:
                     lc.errorbar(
@@ -568,6 +567,16 @@ class TPFMachine(Machine):
                         ls="-",
                         label="SAP",
                     )
+                if hasattr(lc, "psf_flux_NVA") and sap:
+                    lc.plot(
+                        column="psf_flux_NVA",
+                        ax=ax,
+                        c="tab:blue",
+                        lw=0.3,
+                        ls="-",
+                        label="PSF-NOVA",
+                    )
+                lc.errorbar(ax=ax, c="k", lw=0.3, ls="-")
                 kdx += 1
                 ax = plt.subplot2grid((1, 4), (0, 3))
                 lk.utils.plot_image(mod, extent=img_extent, ax=ax)
@@ -1428,11 +1437,14 @@ def _clean_source_list(sources, ra, dec, pixel_tolerance=4):
         else:
             blended_faint[b] = False
 
+    too_bright = sources.phot_g_mean_mag.values > 10
+
     # Keep track of sources that we removed
     sources.loc[:, "clean_flag"] = 0
     # to avoid pandas SettingWithCopyWarning
     sources.clean_flag.where(inside, 2 ** 0, inplace=True)
     sources.clean_flag.where(blended_faint, 2 ** 1, inplace=True)
+    sources.clean_flag.where(too_bright, 2 ** 2, inplace=True)
     # combine 2 source masks
     clean = sources.clean_flag == 0
     removed_sources = sources[~clean].reset_index(drop=True)
