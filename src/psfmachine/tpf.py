@@ -2,6 +2,7 @@
 import os
 import logging
 import numpy as np
+import pandas as pd
 import lightkurve as lk
 from astropy.coordinates import SkyCoord, match_coordinates_sky
 from astropy.time import Time
@@ -865,6 +866,7 @@ class TPFMachine(Machine):
         tpfs,
         magnitude_limit=18,
         dr=2,
+        sources=None,
         time_mask=None,
         apply_focus_mask=True,
         renormalize_tpf_bkg=False,
@@ -1003,9 +1005,10 @@ class TPFMachine(Machine):
             saturated_mask,
         )
 
-        sources = _get_coord_and_query_gaia(
-            tpfs, magnitude_limit, dr=dr, ra=query_ra, dec=query_dec, rad=query_rad
-        )
+        if sources is None or not isinstance(sources, pd.DataFrame):
+            sources = _get_coord_and_query_gaia(
+                tpfs, magnitude_limit, dr=dr, ra=query_ra, dec=query_dec, rad=query_rad
+            )
 
         def get_tpf2source():
             tpf2source = []
