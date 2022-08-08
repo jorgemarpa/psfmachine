@@ -97,6 +97,14 @@ class TPFMachine(Machine):
         self.time_corrector = time_corrector
         self.cartesian_knot_spacing = cartesian_knot_spacing
         self.bkg_subtracted = bkg_subtracted
+        # limiting mag values to consider contamination for kepler & tess
+        if self.nsources / self.npixels > 0.2:
+            if self.tpf_meta["mission"][0].lower() == "kepler":
+                self.cont_mag_limit = 17.5
+            elif self.tpf_meta["mission"][0].lower() == "tess":
+                self.cont_mag_limit = 17
+            else:
+                self.cont_mag_limit = 18
 
     def __repr__(self):
         return f"TPFMachine (N sources, N times, N pixels): {self.shape}"
@@ -141,8 +149,15 @@ class TPFMachine(Machine):
             return
         # invert maks to get bkg pixels from TPFs
         self._get_source_mask()
+        if isinstance(self.cont_mag_limit, (float, int)):
+            bkg_pixel_mask = self.source_mask.multiply(
+                self.sources.phot_g_mean_mag.values[:, None] < self.cont_mag_limit
+            )
+        else:
+            bkg_pixel_mask = self.source_mask.copy()
+        bkg_pixel_mask.eliminate_zeros()
         bkg_pixel_mask = ~np.asarray(
-            (self.source_mask.todense()).sum(axis=0).astype(bool)
+            (bkg_pixel_mask.todense()).sum(axis=0).astype(bool)
         ).ravel()
         bkg_row = self.row
         bkg_column = self.column
@@ -211,7 +226,7 @@ class TPFMachine(Machine):
             # background)
             self.flux -= self.bkg_estimator.model[:, self.pixels_in_tpf]
             # to avoid negative fluxes
-            self.bkg_median_level = np.median(
+            self.bkg_median_level = np.nanmedian(
                 self.flux[:, self.bkg_pixel_mask[self.pixels_in_tpf]]
             )
             self.flux -= self.bkg_median_level
@@ -669,8 +684,10 @@ class TPFMachine(Machine):
             raise ValueError("File format not suported. Please provide a FITS file.")
 
         # create source mask and uncontaminated pixel mask
-        self._get_source_mask()
-        self._get_uncontaminated_pixel_mask()
+        if not hasattr(self, "source_mask"):
+            self._get_source_mask(**kwargs)
+        if not hasattr(self, "uncontaminated_source_mask"):
+            self._get_uncontaminated_pixel_mask()
 
         # open file
         hdu = fits.open(input)
