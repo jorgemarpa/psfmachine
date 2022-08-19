@@ -140,6 +140,8 @@ class Machine(object):
             the design matrix, options are "linear" or "sqrt".
         quiet: booleans
             Quiets TQDM progress bars.
+        contaminant_mag_limit: float
+          The limiting magnitude at which a sources is considered as contaminant
         """
 
         if not isinstance(sources, pd.DataFrame):
@@ -168,7 +170,7 @@ class Machine(object):
         self.cartesian_knot_spacing = "sqrt"
         # disble tqdm prgress bar when running in HPC
         self.quiet = False
-        self.cont_mag_limit = None
+        self.contaminant_mag_limit = None
 
         if time_mask is None:
             self.time_mask = np.ones(len(time), bool)
@@ -569,9 +571,10 @@ class Machine(object):
         """
 
         # we flag sources fainter than mag_limit as non-contaminant
-        if isinstance(self.cont_mag_limit, (float, int)):
+        if isinstance(self.contaminant_mag_limit, (float, int)):
             aux = self.source_mask.multiply(
-                self.sources.phot_g_mean_mag.values[:, None] < self.cont_mag_limit
+                self.sources.phot_g_mean_mag.values[:, None]
+                < self.contaminant_mag_limit
             )
             aux.eliminate_zeros()
             self.uncontaminated_source_mask = aux.multiply(
@@ -1443,7 +1446,6 @@ class Machine(object):
             ylim=(0, radius),
             yticks=np.linspace(0, radius, 5, dtype=int),
         )
-
         im = ax[1, 0].scatter(
             dx,
             dy,
