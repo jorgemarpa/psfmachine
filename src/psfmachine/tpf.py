@@ -155,9 +155,10 @@ class TPFMachine(Machine):
             return
         # invert maks to get bkg pixels from TPFs
         self._get_source_mask()
-        if isinstance(self.cont_mag_limit, (float, int)):
+        if isinstance(self.contaminant_mag_limit, (float, int)):
             bkg_pixel_mask = self.source_mask.multiply(
-                self.sources.phot_g_mean_mag.values[:, None] < self.cont_mag_limit
+                self.sources.phot_g_mean_mag.values[:, None]
+                < self.contaminant_mag_limit
             )
         else:
             bkg_pixel_mask = self.source_mask.copy()
@@ -223,7 +224,7 @@ class TPFMachine(Machine):
             mask=self.bkg_pixel_mask,
             tknotspacing=4,
             # this takes into account the maximum space between bkg pixels in row
-            xknotspacing=16,
+            xknotspacing=20,
         )
 
         # remove background when necessary, this is done just once
