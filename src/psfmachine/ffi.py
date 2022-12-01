@@ -153,6 +153,9 @@ class FFIMachine(Machine):
         cutout_origin=[0, 0],
         correct_offsets=False,
         plot_offsets=False,
+        sources=None,
+        magnitude_limit=18,
+        dr=3,
         **kwargs,
     ):
         """
@@ -215,16 +218,17 @@ class FFIMachine(Machine):
         else:
             ngrid = (5, 5) if flux.shape[1] < 500 else (10, 10)
         # query Gaia and clean sources.
-        sources = _get_sources(
-            ra,
-            dec,
-            wcs,
-            magnitude_limit=18 if metadata["TELESCOP"] == "Kepler" else 15,
-            epoch=time.jyear.mean(),
-            ngrid=ngrid,
-            dr=3,
-            img_limits=[[row.min(), row.max()], [column.min(), column.max()]],
-        )
+        if sources is None:
+            sources = _get_sources(
+                ra,
+                dec,
+                wcs,
+                magnitude_limit=magnitude_limit,
+                epoch=time.jyear.mean(),
+                ngrid=ngrid,
+                dr=dr,
+                img_limits=[[row.min(), row.max()], [column.min(), column.max()]],
+            )
         # correct coordinate offset if necessary.
         if correct_offsets:
             ra, dec, sources = _check_coordinate_offsets(
