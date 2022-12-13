@@ -35,6 +35,8 @@ def get_gaia_sources(ras, decs, rads, magnitude_limit=18, epoch=2020, dr=2):
         shape nsources
     magnitude_limit : int
         Limiting magnitued for query
+    dr : int or string
+        Gaia Data Release version, if Early DR 3 (aka EDR3) is wanted use `"edr3"`.
 
     Returns
     -------
@@ -47,6 +49,10 @@ def get_gaia_sources(ras, decs, rads, magnitude_limit=18, epoch=2020, dr=2):
         decs = [decs]
     if not hasattr(rads, "__iter__"):
         rads = [rads]
+    if dr not in [1, 2, 3, "edr3"]:
+        raise ValueError("Please pass a valid data release")
+    if isinstance(dr, int):
+        dr = f"dr{dr}"
     wheres = [
         f"""1=CONTAINS(
                   POINT('ICRS',{ra},{dec}),
@@ -56,57 +62,24 @@ def get_gaia_sources(ras, decs, rads, magnitude_limit=18, epoch=2020, dr=2):
 
     where = """\n\tOR """.join(wheres)
 
-    internet = True
-    try:
-        _ = requests.get("https://gea.esac.esa.int/archive/", timeout=5)
-    except (requests.ConnectionError, requests.Timeout):
-        internet = False
-        # print("No internet connection")
-
-    if internet:
-        if dr == 2:
-            # CH: We don't need a lot of these columns we could greatly reduce it
-            gd = pyia.GaiaData.from_query(
-                f"""SELECT designation,
-                coord1(prop) AS ra, coord2(prop) AS dec, parallax,
-                parallax_error, pmra, pmdec,
-                phot_g_mean_flux,
-                phot_g_mean_mag,
-                phot_bp_mean_mag,
-                phot_rp_mean_mag FROM (
+    gd = pyia.GaiaData.from_query(
+        f"""SELECT designation,
+        coord1(prop) AS ra, coord2(prop) AS dec, parallax,
+        parallax_error, pmra, pmdec,
+        phot_g_mean_flux,
+        phot_g_mean_mag,
+        phot_bp_mean_mag,
+        phot_rp_mean_mag FROM (
          SELECT *,
          EPOCH_PROP_POS(ra, dec, parallax, pmra, pmdec, 0, ref_epoch, {epoch}) AS prop
-         FROM gaiadr2.gaia_source
+         FROM gaia{dr}.gaia_source
          WHERE {where}
         )  AS subquery
         WHERE phot_g_mean_mag<={magnitude_limit}
-
         """
-            )
-        elif dr == 3:
-            gd = pyia.GaiaData.from_query(
-                f"""SELECT designation,
-                coord1(prop) AS ra, coord2(prop) AS dec, parallax,
-                parallax_error, pmra, pmdec,
-                phot_g_mean_flux,
-                phot_g_mean_mag,
-                phot_bp_mean_mag,
-                phot_rp_mean_mag FROM (
-                 SELECT *,
-                 EPOCH_PROP_POS(ra, dec, parallax, pmra, pmdec, 0, ref_epoch, {epoch}) AS prop
-                 FROM gaiaedr3.gaia_source
-                 WHERE {where}
-                )  AS subquery
-                WHERE phot_g_mean_mag<={magnitude_limit}
-                """
-            )
-        else:
-            raise ValueError("Please pass a valid data release")
-        return gd.data.to_pandas()
-    else:
-        from .nas_utils import query_local_db
+    )
 
-        return query_local_db(ras, decs, rads, magnitude_limit=magnitude_limit)
+    return gd.data.to_pandas()
 
 
 def do_tiled_query(ra, dec, ngrid=(5, 5), magnitude_limit=18, epoch=2020, dr=3):
@@ -689,21 +662,16 @@ def bspline_smooth(y, x=None, degree=3, do_segments=False, breaks=None, n_knots=
     else:
         splits = [0, y.shape[-1]]
 
-    def spline(v):
-        knots = np.linspace(v.min(), v.max(), n_knots)
-        DM = np.asarray(
-            dmatrix(
-                "bs(x, knots=knots, degree=2, include_intercept=True)",
-                {"x": list(v), "knots": knots},
-            )
-        )
-        x = np.array_split(np.arange(len(v)), splits)
-        masks = np.asarray([np.in1d(np.arange(len(v)), x1).astype(float) for x1 in x]).T
-        DM = np.hstack([DM[:, idx][:, None] * masks for idx in range(DM.shape[1])])
-        return DM
-
     y_smooth = []
-    DM = spline(np.arange(y.shape[-1]))
+    v = np.arange(y.shape[-1])
+    DM = spline1d(v, np.linspace(v.min(), v.max(), n_knots)).toarray()
+    # do segments
+    arr_splits = np.array_split(np.arange(len(v)), splits)
+    masks = np.asarray(
+        [np.in1d(np.arange(len(v)), x1).astype(float) for x1 in arr_splits]
+    ).T
+    DM = np.hstack([DM[:, idx][:, None] * masks for idx in range(DM.shape[1])])
+
     prior_mu = np.zeros(DM.shape[1])
     prior_sigma = np.ones(DM.shape[1]) * 1e5
     # iterate over vectors in y

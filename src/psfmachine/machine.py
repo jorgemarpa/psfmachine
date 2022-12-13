@@ -1,6 +1,7 @@
 """
 Defines the main Machine object that fit a mean PRF model to sources
 """
+import logging
 import numpy as np
 import pandas as pd
 from scipy import sparse
@@ -19,6 +20,7 @@ from .utils import (
 from .aperture import optimize_aperture, compute_FLFRCSAP, compute_CROWDSAP
 from .perturbation import PerturbationMatrix3D
 
+log = logging.getLogger(__name__)
 __all__ = ["Machine"]
 
 
@@ -86,6 +88,8 @@ class Machine(object):
             Number of radial knots in the spline model.
         n_phi_knots: int
             Number of azimuthal knots in the spline model.
+        time_nknots: int
+            Number og knots for cartesian DM in time model.
         time_resolution: int
             Number of time points to bin by when fitting for velocity aberration.
         time_radius: float
@@ -135,6 +139,8 @@ class Machine(object):
             the design matrix, options are "linear" or "sqrt".
         quiet: booleans
             Quiets TQDM progress bars.
+        contaminant_mag_limit: float
+          The limiting magnitude at which a sources is considered as contaminant
         """
 
         if not isinstance(sources, pd.DataFrame):
@@ -163,6 +169,7 @@ class Machine(object):
         self.cartesian_knot_spacing = "sqrt"
         # disble tqdm prgress bar when running in HPC
         self.quiet = False
+        self.contaminant_mag_limit = None
 
         if time_mask is None:
             self.time_mask = np.ones(len(time), bool)
@@ -563,18 +570,24 @@ class Machine(object):
         This mask is used to select pixels to build the PSF model.
         """
 
-        # This could be a property, but it is a pain to calculate on the fly, perhaps with lru_cache
-        self.uncontaminated_source_mask = self.source_mask.multiply(
-            np.asarray(self.source_mask.sum(axis=0) == 1)[0]
-        ).tocsr()
+        # we flag sources fainter than mag_limit as non-contaminant
+        if isinstance(self.contaminant_mag_limit, (float, int)):
+            aux = self.source_mask.multiply(
+                self.sources.phot_g_mean_mag.values[:, None]
+                < self.contaminant_mag_limit
+            )
+            aux.eliminate_zeros()
+            self.uncontaminated_source_mask = aux.multiply(
+                np.asarray(aux.sum(axis=0) == 1)[0]
+            ).tocsr()
+        # all sources are accounted for contamination
+        else:
+            self.uncontaminated_source_mask = self.source_mask.multiply(
+                np.asarray(self.source_mask.sum(axis=0) == 1)[0]
+            ).tocsr()
+
         # have to remove leaked zeros
         self.uncontaminated_source_mask.eliminate_zeros()
-
-        # # reduce to good pixels
-        # self.uncontaminated_pixel_mask = sparse.csr_matrix(
-        #     self.uncontaminated_source_mask.sum(axis=0) > 0
-        # )
-
         return
 
     # CH: We're not currently using this, but it might prove useful later so I will leave for now
@@ -609,12 +622,14 @@ class Machine(object):
         self,
         plot=False,
         bin_method="bin",
+        poly_order=3,
         segments=False,
         focus=False,
         focus_exptime=50,
         pca_ncomponents=0,
         pca_smooth_time_scale=0,
         positions=False,
+        other_vectors=None,
     ):
         """
         Builds a time model that moves the PRF model to account for the scene movement
@@ -631,10 +646,13 @@ class Machine(object):
             Plot a diagnostic figure.
         bin_method: string
             Type of bin method, options are "bin" and "downsample".
+        poly_order: int
+            Degree of the time polynomial used for the time model. Default is 3.
         segments : boolean
             If `True` will split the light curve into segments to fit different time
             models with a common pixel normalization. If `False` will fit the full
-            time series as one segment.
+            time series as one segment. Segments breaks are infered from time
+            discontinuities.
         focus: boolean
             Add a component that models th focus change at the begining of a segment.
         focus_exptime : int
@@ -648,6 +666,11 @@ class Machine(object):
         positions : boolean or string
             If one of strings `"poscorr", "centroid"` then the perturbation matrix will
             add other vectors accounting for position shift.
+        other_vectors : list or numpy.ndarray
+            Set of other components used to include  in the perturbed model.
+            See `psfmachine.perturbation.PerturbationMatrix` object for details.
+            Posible use case are using Kepler CBVs or engeneering data. Shape has to be
+            (ncomponents, ntimes). Default is `None`.
         """
         # create the time and space basis
         _whitened_time = (self.time - self.time.mean()) / (
@@ -665,6 +688,8 @@ class Machine(object):
 
         # add other vectors if asked, centroids or poscorrs
         if positions:
+            if other_vectors is not None:
+                raise ValueError("When using `positions` do not provide `other_vector`")
             if positions == "poscorr" and hasattr(self, "pos_corr1"):
                 mpc1 = np.nanmedian(self.pos_corr1, axis=0)
                 mpc2 = np.nanmedian(self.pos_corr2, axis=0)
@@ -677,10 +702,15 @@ class Machine(object):
                 )
 
             # smooth the vectors
+            if not segments:
+                log.warning(
+                    "Segments will still be used to smooth the position vectors."
+                    "See https://github.com/SSDataLab/psfmachine/pull/63 for details."
+                )
             mpc1_smooth, mpc2_smooth = bspline_smooth(
                 [mpc1, mpc2],
                 x=self.time,
-                do_segments=segments,
+                do_segments=True,
                 n_knots=50,
             )
             # normalize components
@@ -692,14 +722,16 @@ class Machine(object):
             )
             # combine them as the first order
             other_vectors = [mpc1_smooth, mpc2_smooth, mpc1_smooth * mpc2_smooth]
-        else:
-            other_vectors = None
+        if other_vectors is not None:
+            if not isinstance(other_vectors, (list, np.ndarray)):
+                raise ValueError("`other vector` is not a list of arrays or a ndarray")
 
         # create a 3D perturbation matrix
         P = PerturbationMatrix3D(
             time=_whitened_time,
             dx=dx,
             dy=dy,
+            poly_order=poly_order,
             segments=segments,
             focus=focus,
             other_vectors=other_vectors,
@@ -761,7 +793,6 @@ class Machine(object):
 
         # iterate to remvoe outliers
         for count in [0, 1, 2]:
-            # need to add pixel_mask=k
             P.fit(flux_norm, flux_err=flux_err_norm, pixel_mask=k)
             res = flux_binned - P.matrix.dot(P.weights).reshape(flux_binned.shape)
             chi2 = np.sum((res) ** 2 / (flux_err_binned ** 2), axis=0) / P.nbins
@@ -769,7 +800,7 @@ class Machine(object):
             bad_targets = bad_targets.all(axis=0)
             k &= ~bad_targets
 
-        # bookkeeping
+        # book keeping
         self.flux_binned = flux_binned
         self._time_masked_pix = k
         self.P = P
@@ -788,11 +819,6 @@ class Machine(object):
     def plot_time_model(self):
         """
         Diagnostic plot of time model.
-
-        Parameters
-        ----------
-        segment : int
-            Which light curve segment will be plotted, default is first one.
 
         Returns
         -------
@@ -883,7 +909,7 @@ class Machine(object):
             vmin=0.9,
             vmax=1.1,
         )
-        ax[1].set(xlabel="Binned Time Index", title="Perturbed Mode")
+        ax[1].set(xlabel="Binned Time Index", title="Perturbed Model")
 
         cbar = fig2.colorbar(
             im, ax=ax[:2], shrink=0.7, orientation="horizontal", location="bottom"
@@ -1240,7 +1266,6 @@ class Machine(object):
             ylim=(0, radius),
             yticks=np.linspace(0, radius, 5, dtype=int),
         )
-
         im = ax[1, 0].scatter(
             dx,
             dy,

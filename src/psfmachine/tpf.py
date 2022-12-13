@@ -96,11 +96,27 @@ class TPFMachine(Machine):
         self.time_corrector = time_corrector
         self.cartesian_knot_spacing = cartesian_knot_spacing
         self.bkg_subtracted = bkg_subtracted
+        # limiting mag values to consider contamination for kepler & tess
+        # hardcoded values to work with kepler
+        # 0.2 seems ok for TESS
+        if self.nsources / self.npixels > 0.2:
+            if self.tpf_meta["mission"][0].lower() == "kepler":
+                self.contaminant_mag_limit = 17.5
+            elif self.tpf_meta["mission"][0].lower() == "tess":
+                self.contaminant_mag_limit = 16
+            else:
+                self.contaminant_mag_limit = 18
+            log.warning(
+                "Region is too crowded (nsources/npixels > 0.2), setting limiting "
+                f"magnitude to {self.contaminant_mag_limit} for contaminant sources."
+            )
 
     def __repr__(self):
         return f"TPFMachine (N sources, N times, N pixels): {self.shape}"
 
-    def remove_background_model(self, plot=False, data_augment=None):
+    def remove_background_model(
+        self, plot=False, data_augment=None, zero_centered=True
+    ):
         """
         Function to fit and remove the background signal of the TPF stack using
         `kbackground` package. This is a Kepler/K2 specific tool.
@@ -126,6 +142,9 @@ class TPFMachine(Machine):
             augment the background pixels. This argument is useful to include Kepler's
             background pixels from the mission. The dictionary has to have the following
             keys; "column", "row", and "flux".
+        zero_centered : boolean
+            If True the pixel background level will be zero centered. If False pixels
+            will be positive.
         """
         if not self.tpf_meta["mission"][0].lower() in ["kepler", "k2", "ktwo"]:
             log.warning(
@@ -145,15 +164,20 @@ class TPFMachine(Machine):
         pixels_in_tpf = np.ones_like(self.row, dtype=bool)
 
         # enheance pixel mask
+        # creates a quick simple bkg model as fx of time to find variable pixels by
+        # taking the percentile value of pixel-flux distribution at each time
+        # the choice of percentile is irrelevant, it's to capture the global trend
+        # of the background pixels in time
         time_corr = np.nanpercentile(bkg_flux, 20, axis=1)[:, None]
         med_flux = np.median(bkg_flux - time_corr, axis=0)[None, :]
 
         f = bkg_flux - med_flux
         f -= np.median(f)
-        # Mask out pixels that are particularly bright.
+        # Mask out pixels that are particularly bright, 500 its a good number for Kepler
         _mask = (f - time_corr).std(axis=0) < 500
         if not _mask.any():
             raise ValueError("All the input pixels are brighter than 500 counts.")
+        # non variable pixels
         _mask &= (f - time_corr).std(axis=0) < 30
         _mask &= ~sigma_clip(med_flux[0]).mask
         _mask &= ~sigma_clip(np.std(f - time_corr, axis=0)).mask
@@ -190,21 +214,26 @@ class TPFMachine(Machine):
             self.bkg_flux,
             mask=self.bkg_pixel_mask,
             tknotspacing=4,
-            xknotspacing=6,
+            # this takes into account the maximum space between bkg pixels in row
+            xknotspacing=16,
         )
 
         # remove background when necessary, this is done just once
         if not self.bkg_subtracted:
-            bkg_mask = ~np.asarray(
-                (self.source_mask.todense()).sum(axis=0).astype(bool)
-            ).ravel()
             # remove bkg and median value (kbackground fits the median-normalized
             # background)
             self.flux -= self.bkg_estimator.model[:, self.pixels_in_tpf]
-            self.bkg_median_level = np.median(self.flux[:, bkg_mask])
+            # to avoid negative fluxes
+            self.bkg_median_level = np.nanmedian(
+                self.flux[:, self.bkg_pixel_mask[self.pixels_in_tpf]]
+            )
             self.flux -= self.bkg_median_level
             # set bkg subs flag so this step happens only one time
             self.bkg_subtracted = True
+            if not zero_centered:
+                zp = np.abs(self.flux.min())
+                self.bkg_median_level += zp
+                self.flux += zp
 
         if plot:
             self.bkg_estimator.plot()
@@ -644,8 +673,10 @@ class TPFMachine(Machine):
             raise ValueError("File format not suported. Please provide a FITS file.")
 
         # create source mask and uncontaminated pixel mask
-        self._get_source_mask()
-        self._get_uncontaminated_pixel_mask()
+        if not hasattr(self, "source_mask"):
+            self._get_source_mask()
+        if not hasattr(self, "uncontaminated_source_mask"):
+            self._get_uncontaminated_pixel_mask()
 
         # open file
         hdu = fits.open(input)
@@ -914,14 +945,29 @@ class TPFMachine(Machine):
         if isinstance(tpfs[0], lk.KeplerTargetPixelFile):
             tpf_meta["tpfmag"] = [tpf.get_header()["kepmag"] for tpf in tpfs]
         elif isinstance(tpfs[0], lk.TessTargetPixelFile):
-            tpf_meta["tpfmag"] = [tpf.get_header()["tmag"] for tpf in tpfs]
+            tpf_meta["tpfmag"] = [tpf.get_header()["tessmag"] for tpf in tpfs]
         else:
             raise ValueError("TPFs not understood")
 
-        if not np.all([isinstance(tpf, lk.KeplerTargetPixelFile) for tpf in tpfs]):
-            raise ValueError("Please only pass `lk.KeplerTargetPixelFiles`")
-        if len(np.unique(tpf_meta["channel"])) != 1:
-            raise ValueError("TPFs span multiple channels.")
+        if not np.all(
+            [
+                isinstance(tpf, (lk.KeplerTargetPixelFile, lk.TessTargetPixelFile))
+                for tpf in tpfs
+            ]
+        ):
+            raise ValueError(
+                "Please only pass `lk.KeplerTargetPixelFiles` or "
+                "`lk.TessTargetPixelFile`"
+            )
+        if isinstance(tpfs[0], lk.KeplerTargetPixelFile):
+            if len(np.unique(tpf_meta["channel"])) != 1:
+                raise ValueError("TPFs span multiple channels.")
+        if isinstance(tpfs[0], lk.TessTargetPixelFile):
+            if (
+                len(np.unique(tpf_meta["ccd"])) != 1
+                and len(np.unique(tpf_meta["camera"])) != 1
+            ):
+                raise ValueError("TPFs span multiple cameras/CCDs.")
 
         # parse tpfs
         (
