@@ -185,6 +185,7 @@ def _make_A_polar(phi, r, cut_r=6, rmin=1, rmax=18, n_r_knots=12, n_phi_knots=15
 
 def spline1d(x, knots, degree=3):
     """Make a spline in a 1D variable `x`"""
+    # x = np.hstack([x, np.min(knots), np.max(knots)])
     X = sparse.csr_matrix(
         np.asarray(
             dmatrix(
@@ -199,20 +200,67 @@ def spline1d(x, knots, degree=3):
     return X
 
 
-def _make_A_cartesian(x, y, n_knots=10, radius=3.0, knot_spacing_type="sqrt", degree=3):
+def _make_A_cartesian(
+    x, y, n_knots=10, radius=3.0, knot_spacing_type="sqrt", degree=3, percentile=10
+):
     if knot_spacing_type == "sqrt":
-        knots = np.linspace(-np.sqrt(radius), np.sqrt(radius), n_knots)
-        knots = np.sign(knots) * knots ** 2
+        xlim = np.sqrt(np.abs(np.percentile(x, [percentile, 100 - percentile])))
+        xknots = np.linspace(-xlim[0], xlim[1], n_knots)
+        xknots = np.sign(xknots) * xknots ** 2
+        xknots = np.hstack([x.min(), xknots, x.max()])
+        ylim = np.sqrt(np.abs(np.percentile(y, [percentile, 100 - percentile])))
+        yknots = np.linspace(-ylim[0], ylim[1], n_knots)
+        yknots = np.sign(yknots) * yknots ** 2
+        yknots = np.hstack([y.min(), yknots, y.max()])
     else:
-        knots = np.linspace(-radius, radius, n_knots)
-    x_spline = spline1d(x, knots=knots, degree=degree)
-    y_spline = spline1d(y, knots=knots, degree=degree)
+        xknots = np.linspace(*np.percentile(x, [percentile, 100 - percentile]), n_knots)
+        yknots = np.linspace(*np.percentile(y, [percentile, 100 - percentile]), n_knots)
+        xknots = np.hstack([x.min(), xknots, x.max()])
+        yknots = np.hstack([y.min(), yknots, y.max()])
+    x_spline = spline1d(x, knots=xknots, degree=degree)
+    y_spline = spline1d(y, knots=yknots, degree=degree)
 
     X = sparse.hstack(
         [x_spline.multiply(y_spline[:, idx]) for idx in range(y_spline.shape[1])],
         format="csr",
     )
-    return X
+    # find the ij index in X with edge knots
+    xknots_mesh, yknots_mesh = np.meshgrid(
+        np.arange(0, x_spline.shape[1]), np.arange(0, y_spline.shape[1])
+    )
+    # this finds the index in a 2D matrix for the top and bottom of the matrix
+    # remember that x_spline[:, 0] are 1s, then x_spline[:, 1] and x_spline[:, -1]
+    # are the bspline components for the boundary knot
+    mask_t = (yknots_mesh == 0) | (yknots_mesh == 1)
+    mask_b = yknots_mesh == y_spline.shape[1] - 1
+    # this finds the index in a 2D matrix for the left and right borders
+    mask_l = (xknots_mesh == 0) | (xknots_mesh == 1)
+    mask_r = xknots_mesh == x_spline.shape[1] - 1
+
+    # combine mask to get all i,j indices and flatten to match X.shape[1]
+    out_mask = (mask_t | mask_b | mask_l | mask_r).ravel()
+    i_border = np.where(out_mask)[0]
+    # find which compenents keep in X
+    i_center = list(set(np.arange(X.shape[1])) - set(i_border))
+    # reconstruct X with full flexibility in the center and fix boundaries in the edges
+    X = sparse.hstack(
+        [
+            # first we add the 1s
+            sparse.csr_matrix(np.ones(X.shape[0])).T,
+            # upper knots
+            y_spline[:, 1].multiply(np.ones(x_spline.shape[0]).T),
+            # left knots
+            x_spline[:, 1].multiply(np.ones(y_spline.shape[0]).T),
+            # the components for the core
+            X[:, i_center],
+            # right knots
+            x_spline[:, -1].multiply(np.ones(y_spline.shape[0]).T),
+            # lowe knots
+            y_spline[:, -1].multiply(np.ones(x_spline.shape[0]).T),
+        ],
+        format="csr",
+    )
+    return X, xknots, yknots
 
 
 def wrapped_spline(input_vector, order=2, nknots=10):

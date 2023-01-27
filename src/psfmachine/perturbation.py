@@ -442,7 +442,7 @@ class PerturbationMatrix3D(PerturbationMatrix):
         self.radius = radius
         self.degree = degree
         self.knot_spacing_type = knot_spacing_type
-        self.cartesian_matrix = _make_A_cartesian(
+        self.cartesian_matrix, self.xknots, self.yknots = _make_A_cartesian(
             self.dx,
             self.dy,
             n_knots=self.nknots,

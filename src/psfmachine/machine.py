@@ -867,6 +867,8 @@ class Machine(object):
             cmap="coolwarm",
             rasterized=True,
         )
+        xknots, yknots = np.meshgrid(self.P.xknots, self.P.yknots)
+        ax[1, 1].scatter(xknots, yknots, c="k", s=2, marker="x")
         ax[0, 0].set(title="Data First Cadence", ylabel=r"$\delta y$")
         ax[0, 1].set(title="Data Last Cadence")
         ax[1, 0].set(
