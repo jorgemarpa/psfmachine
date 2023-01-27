@@ -224,12 +224,10 @@ def _make_A_cartesian(
         [x_spline.multiply(y_spline[:, idx]) for idx in range(y_spline.shape[1])],
         format="csr",
     )
-    print(X.shape)
-    # find the ij index in X with edge knots
+    # # find the ij index in X with edge knots
     xknots_mesh, yknots_mesh = np.meshgrid(
         np.arange(0, x_spline.shape[1]), np.arange(0, y_spline.shape[1])
     )
-    print(xknots_mesh.shape)
     # this finds the index in a 2D matrix for the top and bottom of the matrix
     # remember that x_spline[:, 0] are 1s, then x_spline[:, 1] and x_spline[:, -1]
     # are the bspline components for the boundary knot
@@ -242,10 +240,8 @@ def _make_A_cartesian(
     # combine mask to get all i,j indices and flatten to match X.shape[1]
     out_mask = (mask_t | mask_b | mask_l | mask_r).ravel()
     i_border = np.where(out_mask)[0]
-    print(i_border.shape)
     # find which compenents keep in X
     i_center = list(set(np.arange(X.shape[1])) - set(i_border))
-    print(len(i_center))
     # reconstruct X with full flexibility in the center and fix boundaries in the edges
     X = sparse.hstack(
         [
@@ -264,7 +260,23 @@ def _make_A_cartesian(
         ],
         format="csr",
     )
-    print(X.shape)
+    # X = sparse.hstack(
+    #     [
+    #         x_spline[:, 2:-1].multiply(y_spline[:, idx])
+    #         for idx in range(2, y_spline.shape[1] - 1)
+    #     ],
+    #     format="csr",
+    # )
+    # X = sparse.hstack(
+    #     [
+    #         x_spline.multiply(sparse.csr_matrix(np.ones(y_spline.shape[0])).T),
+    #         sparse.csr_matrix(np.ones(x_spline.shape[0])).T.multiply(y_spline),
+    #         X,
+    #         sparse.csr_matrix(np.ones(x_spline.shape[0])).T.multiply(y_spline),
+    #         x_spline.multiply(sparse.csr_matrix(np.ones(y_spline.shape[0])).T),
+    #     ],
+    #     format="csr",
+    # )
     return X, xknots, yknots
 
 
