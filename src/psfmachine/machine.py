@@ -790,6 +790,13 @@ class Machine(object):
         flux_binned = P.bin_func(flux_norm)
         flux_err_binned = P.bin_func(flux_err_norm, quad=True)
 
+        # pixel mask using a 2d histogram to preserve datapoints waround high density
+        # areas
+        bin_map, dx_bin, dy_bin, flux_norm_bin, _, bin_mask = threshold_bin(
+            dx, dy, flux_binned[0], abs_thresh=5, bins=20
+        )
+        # k &= bin_mask
+
         # iterate to remvoe outliers
         for count in [0, 1, 2]:
             P.fit(flux_norm, flux_err=flux_err_norm, pixel_mask=k)
@@ -1009,7 +1016,7 @@ class Machine(object):
             nbins = (
                 30 if mean_f.shape[0] <= 1e4 else (60 if mean_f.shape[0] <= 5e4 else 90)
             )
-            _, phi_b, r_b, mean_f, mean_f_err = threshold_bin(
+            _, phi_b, r_b, mean_f, mean_f_err, _ = threshold_bin(
                 phi_b,
                 r_b,
                 mean_f,
@@ -1203,7 +1210,7 @@ class Machine(object):
 
         if bin_data:
             nbins = 30 if mean_f.shape[0] <= 5e3 else 90
-            _, dx, dy, mean_f, _ = threshold_bin(
+            _, dx, dy, mean_f, _, _ = threshold_bin(
                 dx, dy, mean_f, bins=nbins, abs_thresh=5
             )
 
