@@ -1520,10 +1520,7 @@ class Machine(object):
             model has to be built previously with `build_time_model`.
         """
 
-        if hasattr(self, "sap_flux"):
-            prior_mu = np.nanmean(self.sap_flux, axis=0)
-        else:
-            prior_mu = self.source_flux_estimates  # np.zeros(A.shape[1])
+        prior_mu = self.source_flux_estimates  # np.zeros(A.shape[1])
 
         if prior_sigma is None:
             prior_sigma = (
