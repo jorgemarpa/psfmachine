@@ -328,17 +328,21 @@ class Machine(object):
         correct_centroid_offset=True,
         plot=False,
     ):
-        """Find the pixel mask that identifies pixels with contributions from ANY NUMBER of Sources
+        """Find the pixel mask that identifies pixels with contributions from ANY
+        NUMBER of Sources
 
-        Fits a simple polynomial model to the log of the pixel flux values, in radial dimension and source flux,
-        to find the optimum circular apertures for every source.
+        Fits a simple polynomial model to the log of the pixel flux values, in radial
+        dimension and source flux, to find the optimum circular apertures for every
+        source.
 
         Parameters
         ----------
         upper_radius_limit: float
-            The radius limit at which we assume there is no flux from a source of any brightness (arcsec)
+            The radius limit at which we assume there is no flux from a source of any
+            brightness (arcsec)
         lower_radius_limit: float
-            The radius limit at which we assume there is flux from a source of any brightness (arcsec)
+            The radius limit at which we assume there is flux from a source of any
+            brightness (arcsec)
         upper_flux_limit: float
             The flux at which we assume as source is saturated
         lower_flux_limit: float
@@ -590,7 +594,6 @@ class Machine(object):
         self.uncontaminated_source_mask.eliminate_zeros()
         return
 
-    # CH: We're not currently using this, but it might prove useful later so I will leave for now
     def _get_centroids(self):
         """
         Find the ra and dec centroid of the image, at each time.
@@ -610,11 +613,22 @@ class Machine(object):
             )
             self.ra_centroid[t] = np.average(dra_m[k], weights=wgts[k])
             self.dec_centroid[t] = np.average(ddec_m[k], weights=wgts[k])
-        del dra_m, ddec_m
         self.ra_centroid *= u.deg
         self.dec_centroid *= u.deg
-        self.ra_centroid_avg = self.ra_centroid.mean()
-        self.dec_centroid_avg = self.dec_centroid.mean()
+
+        # get average centroid from weighted average psf core
+        mean_f = np.log10(
+            self.uncontaminated_source_mask.astype(float)
+            .multiply(self.flux[self.time_mask].mean(axis=0))
+            .multiply(1 / self.source_flux_estimates[:, None])
+            .data
+        )
+        # this seems like a good threshold to filter the bright center of the psf
+        brgt_thresh = -1.5
+        k = mean_f > brgt_thresh
+        self.ra_centroid_avg = np.average(dra_m[k], weights=mean_f[k]) * u.deg
+        self.dec_centroid_avg = np.average(ddec_m[k], weights=mean_f[k]) * u.deg
+        del dra_m, ddec_m
 
         return
 
@@ -1340,7 +1354,7 @@ class Machine(object):
             )
             self.perturbed_std = np.nanstd(perturbed_lcs, axis=0)
 
-    def plot_shape_model(self, radius=20, frame_index="mean", bin_data=False):
+    def plot_shape_model(self, frame_index="mean", bin_data=False):
         """
         Diagnostic plot of shape model.
 
@@ -1386,9 +1400,12 @@ class Machine(object):
                 dx, dy, mean_f, bins=nbins, abs_thresh=5
             )
 
+        radius = np.maximum(np.abs(dx).max(), np.abs(dy).max()) * 1.1
+        vmin, vmax = np.nanpercentile(mean_f, [3, 97])
+
         fig, ax = plt.subplots(3, 2, figsize=(9, 10.5), constrained_layout=True)
         im = ax[0, 0].scatter(
-            dx, dy, c=mean_f, cmap="viridis", vmin=-3, vmax=-1, s=3, rasterized=True
+            dx, dy, c=mean_f, cmap="viridis", vmin=vmin, vmax=vmax, s=3, rasterized=True
         )
         ax[0, 0].set(
             ylabel=r'$\delta y$ ["]',
@@ -1412,7 +1429,7 @@ class Machine(object):
 
         phi, r = np.arctan2(dy, dx), np.hypot(dx, dy)
         im = ax[0, 1].scatter(
-            phi, r, c=mean_f, cmap="viridis", vmin=-3, vmax=-1, s=3, rasterized=True
+            phi, r, c=mean_f, cmap="viridis", vmin=vmin, vmax=vmax, s=3, rasterized=True
         )
         ax[0, 1].set(
             ylabel='$r$ ["]',
@@ -1435,8 +1452,8 @@ class Machine(object):
             r,
             c=A.dot(self.psf_w),
             cmap="viridis",
-            vmin=-3,
-            vmax=-1,
+            vmin=vmin,
+            vmax=vmax,
             s=3,
             rasterized=True,
         )
@@ -1451,8 +1468,8 @@ class Machine(object):
             dy,
             c=A.dot(self.psf_w),
             cmap="viridis",
-            vmin=-3,
-            vmax=-1,
+            vmin=vmin,
+            vmax=vmax,
             s=3,
             rasterized=True,
         )
