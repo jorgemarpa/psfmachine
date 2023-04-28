@@ -70,7 +70,7 @@ def get_gaia_sources(ras, decs, rads, magnitude_limit=18, epoch=2020, dr=2):
         internet = False
         # print("No internet connection")
 
-    if False:
+    if internet:
         gd = pyia.GaiaData.from_query(
             f"""SELECT designation,
             coord1(prop) AS ra, coord2(prop) AS dec, parallax,
@@ -168,19 +168,27 @@ def do_tiled_query(ra, dec, ngrid=(5, 5), magnitude_limit=18, epoch=2020, dr=3):
     return sources.reset_index(drop=True)
 
 
-def _make_A_polar(phi, r, cut_r=6, rmin=1, rmax=18, n_r_knots=12, n_phi_knots=15):
+def _make_A_polar(
+    phi, r, cut_r=6, rmin=1, rmax=18, n_r_knots=12, n_phi_knots=15, degree=3
+):
     # create the spline bases for radius and angle
-    phi_spline = sparse.csr_matrix(wrapped_spline(phi, order=3, nknots=n_phi_knots).T)
+    phi_spline = sparse.csr_matrix(
+        wrapped_spline(phi, degree=degree, nknots=n_phi_knots).T
+    )
     r_knots = np.linspace(rmin ** 0.5, rmax ** 0.5, n_r_knots) ** 2
     cut_r_int = np.where(r_knots <= cut_r)[0].max()
     r_spline = sparse.csr_matrix(
         np.asarray(
             dmatrix(
-                "bs(x, knots=knots, degree=3, include_intercept=True)",
-                {"x": list(np.hstack([r, rmin, rmax])), "knots": r_knots},
+                "bs(x, knots=knots, degree=degree, include_intercept=True)",
+                {
+                    "x": list(np.hstack([rmin, r, rmax])),
+                    "knots": r_knots,
+                    "degree": degree,
+                },
             )
         )
-    )[:-2]
+    )[1:-1]
 
     # build full desing matrix
     X = sparse.hstack(
@@ -191,7 +199,7 @@ def _make_A_polar(phi, r, cut_r=6, rmin=1, rmax=18, n_r_knots=12, n_phi_knots=15
     cut = np.arange(0, phi_spline.shape[1] * cut_r_int)
     a = list(set(np.arange(X.shape[1])) - set(cut))
     X1 = sparse.hstack(
-        [X[:, a], r_spline[:, 1:cut_r_int], sparse.csr_matrix(np.ones(X.shape[0])).T],
+        [r_spline[:, :cut_r_int], X[:, a]],
         format="csr",
     )
     return X1
@@ -230,7 +238,7 @@ def _make_A_cartesian(x, y, n_knots=10, radius=3.0, knot_spacing_type="sqrt", de
     return X
 
 
-def wrapped_spline(input_vector, order=2, nknots=10):
+def wrapped_spline(input_vector, degree=2, nknots=10):
     """
     Creates a vector of folded-spline basis according to the input data. This is meant
     to be used to build the basis vectors for periodic data, like the angle in polar
@@ -267,7 +275,7 @@ def wrapped_spline(input_vector, order=2, nknots=10):
         ]
     )
     # Higher order basis
-    for order in np.arange(1, 4):
+    for order in np.arange(1, degree):
         basis_1 = []
         for idx in range(len(t) - 1):
             a = ((x1 - t[idx]) / (dt * order)) * basis[idx]
