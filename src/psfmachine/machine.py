@@ -701,18 +701,23 @@ class Machine(object):
                     "`position` not valid, use one of {None, 'poscorr', 'centroid'}"
                 )
 
-            # smooth the vectors
-            if not segments:
-                log.warning(
-                    "Segments will still be used to smooth the position vectors."
-                    "See https://github.com/SSDataLab/psfmachine/pull/63 for details."
+            # k2 centroids do not need smoothing
+            if self.tpf_meta["mission"][0] == "K2":
+                mpc1_smooth, mpc2_smooth = mpc1, mpc2
+            else:
+                # smooth the vectors
+                if not segments:
+                    log.warning(
+                        "Segments will still be used to smooth the position vectors."
+                        "See https://github.com/SSDataLab/psfmachine/pull/63 for details."
+                    )
+                # knot spacing every 1 day
+                mpc1_smooth, mpc2_smooth = bspline_smooth(
+                    [mpc1, mpc2],
+                    x=self.time,
+                    do_segments=True,
+                    n_knots=int((self.time[-1] - self.time[0]) / 1.0),
                 )
-            mpc1_smooth, mpc2_smooth = bspline_smooth(
-                [mpc1, mpc2],
-                x=self.time,
-                do_segments=True,
-                n_knots=50,
-            )
             # normalize components
             mpc1_smooth = (mpc1_smooth - mpc1_smooth.mean()) / (
                 mpc1_smooth.max() - mpc1_smooth.mean()
@@ -1142,6 +1147,7 @@ class Machine(object):
 
         # create the final normalized mean model!
         self._get_normalized_mean_model()
+        # self._get_mean_model()
 
     def _get_mean_model(self):
         """Convenience function to make the scene model"""
@@ -1195,14 +1201,14 @@ class Machine(object):
         mean_model_hd_ma[~mask] = -np.inf
 
         # double integral using trapezoidal rule
-        integral = np.trapz(
+        self.mean_model_integral = np.trapz(
             np.trapz(10 ** mean_model_hd_ma, r_hd[:, 0], axis=0),
             phi_hd[0, :],
             axis=0,
         )
         # renormalize weights and build new shape model
         if not self.normalized_shape_model:
-            self.psf_w *= np.log10(integral)
+            self.psf_w *= np.log10(self.mean_model_integral)
             self.normalized_shape_model = True
         self._get_mean_model()
 
@@ -1215,7 +1221,7 @@ class Machine(object):
                 vmin=-3,
                 vmax=-1,
                 s=1,
-                label=r"$\int = $" + f"{integral:.4f}",
+                label=r"$\int = $" + f"{self.mean_model_integral:.4f}",
             )
             im = ax[1].scatter(
                 r_hd.ravel() * np.cos(phi_hd.ravel()),
@@ -1430,10 +1436,17 @@ class Machine(object):
             n_r_knots=self.n_r_knots,
             n_phi_knots=self.n_phi_knots,
         )
+        # if the mean model is normalized, we revert it only for plotting to make
+        # easier the comparisson between the data and model.
+        # the normalization is a multiplicative factor
+        if self.normalized_shape_model:
+            model = A.dot(self.psf_w / np.log10(self.mean_model_integral))
+        else:
+            model = A.dot(self.psf_w)
         im = ax[1, 1].scatter(
             phi,
             r,
-            c=A.dot(self.psf_w),
+            c=model,
             cmap="viridis",
             vmin=-3,
             vmax=-1,
@@ -1449,7 +1462,7 @@ class Machine(object):
         im = ax[1, 0].scatter(
             dx,
             dy,
-            c=A.dot(self.psf_w),
+            c=model,
             cmap="viridis",
             vmin=-3,
             vmax=-1,
@@ -1467,7 +1480,7 @@ class Machine(object):
         cbar = fig.colorbar(im, ax=ax[:2, 1], shrink=0.7, location="right")
         cbar.set_label("log$_{10}$ Normalized Flux")
         mean_f = 10 ** mean_f
-        model = 10 ** A.dot(self.psf_w)
+        model = 10 ** model
 
         im = ax[2, 0].scatter(
             dx,
