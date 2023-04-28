@@ -70,7 +70,7 @@ def get_gaia_sources(ras, decs, rads, magnitude_limit=18, epoch=2020, dr=2):
         internet = False
         # print("No internet connection")
 
-    if False:
+    if internet:
         gd = pyia.GaiaData.from_query(
             f"""SELECT designation,
             coord1(prop) AS ra, coord2(prop) AS dec, parallax,
