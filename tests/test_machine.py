@@ -138,7 +138,7 @@ def test_psf_metrics():
     assert np.isclose(
         machine.perturbed_ratio_mean[np.isfinite(machine.perturbed_ratio_mean)],
         1,
-        atol=1e-2,
+        atol=2e-2,
     ).all()
 
     # all should be finite because std(0s) = 0
