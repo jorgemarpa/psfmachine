@@ -275,7 +275,7 @@ def wrapped_spline(input_vector, degree=2, nknots=10):
         ]
     )
     # Higher order basis
-    for order in np.arange(1, degree):
+    for order in np.arange(1, degree + 1):
         basis_1 = []
         for idx in range(len(t) - 1):
             a = ((x1 - t[idx]) / (dt * order)) * basis[idx]
