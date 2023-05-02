@@ -52,6 +52,7 @@ class Machine(object):
         time_mask=None,
         n_r_knots=10,
         n_phi_knots=15,
+        polar_bspline_degree=3,
         time_nknots=10,
         time_resolution=200,
         time_radius=8,
@@ -89,6 +90,9 @@ class Machine(object):
             Number of radial knots in the spline model.
         n_phi_knots: int
             Number of azimuthal knots in the spline model.
+        polar_bspline_degree: int
+            Polynomial degree to be used for the bspline functions in the polar design
+            matrix
         time_nknots: int
             Number og knots for cartesian DM in time model.
         time_resolution: int
@@ -160,6 +164,7 @@ class Machine(object):
         self.limit_flux = 1e4
         self.n_r_knots = n_r_knots
         self.n_phi_knots = n_phi_knots
+        self.polar_bspline_degree = polar_bspline_degree
         self.time_nknots = time_nknots
         self.time_resolution = time_resolution
         self.time_radius = time_radius
@@ -1045,6 +1050,7 @@ class Machine(object):
             cut_r=self.cut_r,
             n_r_knots=self.n_r_knots,
             n_phi_knots=self.n_phi_knots,
+            degree=self.polar_bspline_degree,
         )
         prior_sigma = np.ones(A.shape[1]) * 10
         prior_mu = np.zeros(A.shape[1]) - 10
@@ -1173,6 +1179,7 @@ class Machine(object):
             cut_r=self.cut_r,
             n_r_knots=self.n_r_knots,
             n_phi_knots=self.n_phi_knots,
+            degree=self.polar_bspline_degree,
         )
 
         # And create a `mean_model` that has the psf model for all pixels with fluxes
@@ -1201,6 +1208,7 @@ class Machine(object):
             cut_r=self.cut_r,
             n_r_knots=self.n_r_knots,
             n_phi_knots=self.n_phi_knots,
+            degree=self.polar_bspline_degree,
         )
         # evaluate the high res model
         mean_model_hd = Ap.dot(self.psf_w)
@@ -1331,6 +1339,7 @@ class Machine(object):
                     cut_r=self.cut_r,
                     n_r_knots=self.n_r_knots,
                     n_phi_knots=self.n_phi_knots,
+                    degree=self.polar_bspline_degree,
                 )
                 # evaluate the HD model
                 modelhd = 10 ** Ap.dot(self.psf_w)
@@ -1360,7 +1369,9 @@ class Machine(object):
             )
             self.perturbed_std = np.nanstd(perturbed_lcs, axis=0)
 
-    def plot_shape_model(self, frame_index="mean", bin_data=False):
+    def plot_shape_model(
+        self, frame_index="mean", bin_data=False, show_guidelines=False
+    ):
         """
         Diagnostic plot of shape model.
 
@@ -1452,6 +1463,7 @@ class Machine(object):
             cut_r=self.cut_r,
             n_r_knots=self.n_r_knots,
             n_phi_knots=self.n_phi_knots,
+            degree=self.polar_bspline_degree,
         )
         # if the mean model is normalized, we revert it only for plotting to make
         # easier the comparisson between the data and model.
@@ -1536,6 +1548,17 @@ class Machine(object):
         )
         cbar = fig.colorbar(im, ax=ax[2, 1], shrink=0.9, location="right")
         cbar.set_label("(F$_M$ - F$_D$)/F$_D$")
+
+        if show_guidelines:
+            r_knots = (
+                np.linspace(self.rmin ** 0.5, self.rmax ** 0.5, self.n_r_knots) ** 2
+            )
+            phi_knots = np.linspace(-np.pi, np.pi, self.n_phi_knots)
+            r_knots, phi_knots = np.meshgrid(r_knots, phi_knots)
+            ax[0, 1].scatter(phi_knots, r_knots, c="r", s=2, marker="x")
+            ax[0, 1].axhline(self.cut_r, c="r", lw=0.5)
+            ax[0, 0].axvline(0, c="r", lw=0.5)
+            ax[0, 0].axhline(0, c="r", lw=0.5)
 
         return fig
 
