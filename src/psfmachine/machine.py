@@ -629,7 +629,7 @@ class Machine(object):
             .data
         )
         # this seems like a good threshold to filter the bright center of the psf
-        brgt_thresh = -1.5
+        brgt_thresh = -1.0
         k = mean_f > brgt_thresh
         self.ra_centroid_avg = np.average(dra_m[k], weights=mean_f[k]) * u.deg
         self.dec_centroid_avg = np.average(ddec_m[k], weights=mean_f[k]) * u.deg

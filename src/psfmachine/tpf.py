@@ -49,6 +49,7 @@ class TPFMachine(Machine):
         time_radius=8,
         rmin=1,
         rmax=16,
+        cut_r=6,
         pix2obs=None,
         pos_corr1=None,
         pos_corr2=None,
@@ -76,6 +77,7 @@ class TPFMachine(Machine):
             time_radius=time_radius,
             rmin=rmin,
             rmax=rmax,
+            cut_r=cut_r,
         )
         self.tpfs = tpfs
         # match cadences
