@@ -10,7 +10,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.1.2, mkdocs-material-7.0.6">
+      <meta name="generator" content="mkdocs-1.2.3, mkdocs-material-7.3.0">
     
     
       
@@ -18,10 +18,10 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.2c0c5eaf.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.8b42a75e.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.7fa14f5b.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.3f5d1f46.min.css">
         
       
     
@@ -40,6 +40,8 @@
     
     
       
+
+
     
     
   </head>
@@ -51,8 +53,9 @@
     
     
     <body dir="ltr" data-md-color-scheme="" data-md-color-primary="none" data-md-color-accent="none">
-      
   
+    
+    <script>function __prefix(e){return new URL("..",location).pathname+"."+e}function __get(e,t=localStorage){return JSON.parse(t.getItem(__prefix(e)))}</script>
     
     <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
     <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
@@ -69,12 +72,14 @@
       
     </div>
     
-      <header class="md-header" data-md-component="header">
+      
+
+<header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href=".." title="PSFMachine" class="md-header__button md-logo" aria-label="PSFMachine" data-md-component="logo">
       
   
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54z"/></svg>
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m5.8 21 1.6-7L2 9.2l7.2-.6L12 2l2.8 6.6 7.2.6-3.2 2.8H18c-3.1 0-5.6 2.3-6 5.3L5.8 21M17 14v3h-3v2h3v3h2v-3h3v-2h-3v-3h-2z"/></svg>
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -96,9 +101,8 @@
         </div>
       </div>
     </div>
-    <div class="md-header__options">
-      
-    </div>
+    
+    
     
       <label class="md-header__button md-icon" for="__search">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5z"/></svg>
@@ -108,14 +112,18 @@
   <label class="md-search__overlay" for="__search"></label>
   <div class="md-search__inner" role="search">
     <form class="md-search__form" name="search">
-      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" data-md-state="active" required>
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
       <label class="md-search__icon md-icon" for="__search">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5z"/></svg>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12z"/></svg>
       </label>
-      <button type="reset" class="md-search__icon md-icon" aria-label="Clear" tabindex="-1">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z"/></svg>
-      </button>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" aria-label="Clear" tabindex="-1">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z"/></svg>
+        </button>
+      </nav>
+      
     </form>
     <div class="md-search__output">
       <div class="md-search__scrollwrap" data-md-scrollfix>
@@ -136,7 +144,7 @@
 <a href="https://github.com/SSDataLab/psfmachine/" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M439.55 236.05L244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
   </div>
   <div class="md-source__repository">
     GitHub
@@ -145,11 +153,14 @@
       </div>
     
   </nav>
+  
 </header>
     
     <div class="md-container" data-md-component="container">
       
       
+        
+          
         
       
       <main class="md-main" data-md-component="main">
@@ -168,7 +179,7 @@
     <a href=".." title="PSFMachine" class="md-nav__button md-logo" aria-label="PSFMachine" data-md-component="logo">
       
   
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54z"/></svg>
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m5.8 21 1.6-7L2 9.2l7.2-.6L12 2l2.8 6.6 7.2.6-3.2 2.8H18c-3.1 0-5.6 2.3-6 5.3L5.8 21M17 14v3h-3v2h3v3h2v-3h3v-2h-3v-3h-2z"/></svg>
 
     </a>
     PSFMachine
@@ -179,7 +190,7 @@
 <a href="https://github.com/SSDataLab/psfmachine/" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M439.55 236.05L244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
   </div>
   <div class="md-source__repository">
     GitHub
@@ -213,9 +224,38 @@
     
   
   
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_2" type="checkbox" id="__nav_2" checked>
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_2">
+          API
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="API" data-md-level="1">
+        <label class="md-nav__title" for="__nav_2">
+          <span class="md-nav__icon md-icon"></span>
+          API
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+    
+  
+  
     <li class="md-nav__item md-nav__item--active">
       
       <input class="md-nav__toggle md-toggle" data-md-toggle="toc" type="checkbox" id="__toc">
+      
       
         
       
@@ -231,6 +271,7 @@
       
         
 <nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
   
   
     
@@ -264,8 +305,43 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#psfmachine.machine.Machine.build_time_model" class="md-nav__link">
+    build_time_model()
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#psfmachine.machine.Machine.compute_aperture_photometry" class="md-nav__link">
+    compute_aperture_photometry()
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#psfmachine.machine.Machine.create_aperture_mask" class="md-nav__link">
+    create_aperture_mask()
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#psfmachine.machine.Machine.fit_model" class="md-nav__link">
     fit_model()
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#psfmachine.machine.Machine.get_psf_metrics" class="md-nav__link">
+    get_psf_metrics()
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#psfmachine.machine.Machine.perturbed_model" class="md-nav__link">
+    perturbed_model()
   </a>
   
 </li>
@@ -277,10 +353,122 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#psfmachine.machine.Machine.plot_time_model" class="md-nav__link">
+    plot_time_model()
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
       
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tpf/" class="md-nav__link">
+        TPFMachine
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ffi/" class="md-nav__link">
+        FFIMachine
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../aperture/" class="md-nav__link">
+        Aperture Photometry
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../superstamp/" class="md-nav__link">
+        SSMachine
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../perturbationmatrix/" class="md-nav__link">
+        PerturbationMatrix
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../perturbationmatrix3d/" class="md-nav__link">
+        PerturbationMatrix2D
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../utils/" class="md-nav__link">
+        Utils
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
     </li>
   
 
@@ -292,10 +480,99 @@
   
   
   
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_3" type="checkbox" id="__nav_3" >
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_3">
+          Tutorials
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Tutorials" data-md-level="1">
+        <label class="md-nav__title" for="__nav_3">
+          <span class="md-nav__icon md-icon"></span>
+          Tutorials
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
     <li class="md-nav__item">
-      <a href="../tpf/" class="md-nav__link">
-        TPFMachine
+      <a href="../tutorials/Tutorial_10_TPFs/" class="md-nav__link">
+        Intro to PSFMachine Tutorial 1.0
       </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/Tutorial_11_TPFs/" class="md-nav__link">
+        TPFMachine Tutorial 1.1
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/Tutorial_20_FFI/" class="md-nav__link">
+        FFIMachine Tutorial 2.0
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/Tutorial_30_k2ss/" class="md-nav__link">
+        SSMachine Tutorial 3.0
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/Tutorial_31_k2ss/" class="md-nav__link">
+        SSMachine Tutorial 3.1
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
     </li>
   
 
@@ -315,6 +592,7 @@
 <nav class="md-nav md-nav--secondary" aria-label="Table of contents">
   
   
+  
     
   
   
@@ -346,6 +624,27 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#psfmachine.machine.Machine.build_time_model" class="md-nav__link">
+    build_time_model()
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#psfmachine.machine.Machine.compute_aperture_photometry" class="md-nav__link">
+    compute_aperture_photometry()
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#psfmachine.machine.Machine.create_aperture_mask" class="md-nav__link">
+    create_aperture_mask()
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#psfmachine.machine.Machine.fit_model" class="md-nav__link">
     fit_model()
   </a>
@@ -353,8 +652,29 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#psfmachine.machine.Machine.get_psf_metrics" class="md-nav__link">
+    get_psf_metrics()
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#psfmachine.machine.Machine.perturbed_model" class="md-nav__link">
+    perturbed_model()
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#psfmachine.machine.Machine.plot_shape_model" class="md-nav__link">
     plot_shape_model()
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#psfmachine.machine.Machine.plot_time_model" class="md-nav__link">
+    plot_time_model()
   </a>
   
 </li>
@@ -386,10 +706,11 @@
 
       <p>Class for calculating fast PRF photometry on a collection of images and</p>
 <p>a list of in image sources.</p>
-<p>This method is discussed in detail in CITATION</p>
+<p>This method is discussed in detail in
+<a href="https://ui.adsabs.harvard.edu/abs/2021arXiv210608411H/abstract">Hedges et al. 2021</a>.</p>
 <p>This method solves a linear model to assuming Gaussian priors on the weight of
-each linear components as explained by Luger, Foreman-Mackey &amp; Hogg, 2017
-(https://ui.adsabs.harvard.edu/abs/2017RNAAS...1....7L/abstract)</p>
+each linear components as explained by
+<a href="https://ui.adsabs.harvard.edu/abs/2017RNAAS...1....7L/abstract">Luger, Foreman-Mackey &amp; Hogg, 2017</a></p>
 
 
 
@@ -409,7 +730,7 @@ each linear components as explained by Luger, Foreman-Mackey &amp; Hogg, 2017
 
 
 <h2 id="psfmachine.machine.Machine.__init__" class="doc doc-heading">
-<code class="highlight language-python"><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">time</span><span class="p">,</span> <span class="n">flux</span><span class="p">,</span> <span class="n">flux_err</span><span class="p">,</span> <span class="n">ra</span><span class="p">,</span> <span class="n">dec</span><span class="p">,</span> <span class="n">sources</span><span class="p">,</span> <span class="n">column</span><span class="p">,</span> <span class="n">row</span><span class="p">,</span> <span class="n">limit_radius</span><span class="o">=</span><span class="mf">24.0</span><span class="p">,</span> <span class="n">time_mask</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_r_knots</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">n_phi_knots</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span> <span class="n">n_time_knots</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">n_time_points</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">time_radius</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">rmin</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">rmax</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span></code>
+<code class="highlight language-python"><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">time</span><span class="p">,</span> <span class="n">flux</span><span class="p">,</span> <span class="n">flux_err</span><span class="p">,</span> <span class="n">ra</span><span class="p">,</span> <span class="n">dec</span><span class="p">,</span> <span class="n">sources</span><span class="p">,</span> <span class="n">column</span><span class="p">,</span> <span class="n">row</span><span class="p">,</span> <span class="n">limit_radius</span><span class="o">=</span><span class="mf">24.0</span><span class="p">,</span> <span class="n">time_mask</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_r_knots</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">n_phi_knots</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span> <span class="n">time_nknots</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">time_resolution</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">time_radius</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">rmin</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">rmax</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">cut_r</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">sparse_dist_lim</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">sources_flux_column</span><span class="o">=</span><span class="s1">&#39;phot_g_mean_flux&#39;</span><span class="p">)</span></code>
 
   <span class="doc doc-properties">
       <small class="doc doc-property doc-property-special"><code>special</code></small>
@@ -419,12 +740,6 @@ each linear components as explained by Luger, Foreman-Mackey &amp; Hogg, 2017
 
     <div class="doc doc-contents ">
 
-      <p>Class for calculating fast PRF photometry on a collection of images and</p>
-<p>a list of in image sources.</p>
-<p>This method is discussed in detail in CITATION</p>
-<p>This method solves a linear model to assuming Gaussian priors on the weight of
-each linear components as explained by Luger, Foreman-Mackey &amp; Hogg, 2017
-(https://ui.adsabs.harvard.edu/abs/2017RNAAS...1....7L/abstract)</p>
 
 <p><strong>Parameters:</strong></p>
 <table>
@@ -482,7 +797,7 @@ each linear components as explained by Luger, Foreman-Mackey &amp; Hogg, 2017
       <tr>
         <td><code>row</code></td>
         <td><code>np.ndarray</code></td>
-        <td><p>Data array containing the "columns" of the detector that each pixel is on.</p></td>
+        <td><p>Data array containing the "rows" of the detector that each pixel is on.</p></td>
         <td><em>required</em></td>
       </tr>
       <tr>
@@ -512,7 +827,13 @@ Use this to e.g. select frames with low VA, or no focus change</p></td>
         <td><code>15</code></td>
       </tr>
       <tr>
-        <td><code>n_time_points</code></td>
+        <td><code>time_nknots</code></td>
+        <td><code>int</code></td>
+        <td><p>Number og knots for cartesian DM in time model.</p></td>
+        <td><code>10</code></td>
+      </tr>
+      <tr>
+        <td><code>time_resolution</code></td>
         <td><code>int</code></td>
         <td><p>Number of time points to bin by when fitting for velocity aberration.</p></td>
         <td><code>200</code></td>
@@ -535,6 +856,28 @@ will be fit. (arcseconds)</p></td>
         <td><code>float</code></td>
         <td><p>The maximum radius for the PRF model to be fit. (arcseconds)</p></td>
         <td><code>16</code></td>
+      </tr>
+      <tr>
+        <td><code>cut_r</code></td>
+        <td><code>float</code></td>
+        <td><p>Radius distance whithin the shape model only depends on radius and not
+angle.</p></td>
+        <td><code>6</code></td>
+      </tr>
+      <tr>
+        <td><code>sparse_dist_lim</code></td>
+        <td><code>float</code></td>
+        <td><p>Radial distance used to include pixels around sources when creating delta
+arrays (dra, ddec, r, and phi) as sparse matrices for efficiency.
+Default is 40" (recommended for kepler). (arcseconds)</p></td>
+        <td><code>40</code></td>
+      </tr>
+      <tr>
+        <td><code>sources_flux_column</code></td>
+        <td><code>str</code></td>
+        <td><p>Column name in <code>sources</code> table to be used as flux estimate. For Kepler data
+gaia.phot_g_mean_flux is recommended, for TESS use gaia.phot_rp_mean_flux.</p></td>
+        <td><code>&#39;phot_g_mean_flux&#39;</code></td>
       </tr>
   </tbody>
 </table>
@@ -609,6 +952,22 @@ build the PSF model</p></td>
         <td><code>scipy.sparce.csr_matrix</code></td>
         <td><p>Mean PSF model values per pixel used for PSF photometry</p></td>
       </tr>
+      <tr>
+        <td><code>cartesian_knot_spacing</code></td>
+        <td><code>string</code></td>
+        <td><p>Defines the type of spacing between knots in cartessian space to generate
+the design matrix, options are "linear" or "sqrt".</p></td>
+      </tr>
+      <tr>
+        <td><code>quiet</code></td>
+        <td><code>booleans</code></td>
+        <td><p>Quiets TQDM progress bars.</p></td>
+      </tr>
+      <tr>
+        <td><code>contaminant_mag_limit</code></td>
+        <td><code>float</code></td>
+        <td><p>The limiting magnitude at which a sources is considered as contaminant</p></td>
+      </tr>
   </tbody>
 </table>
     </div>
@@ -622,7 +981,7 @@ build the PSF model</p></td>
 
 
 <h2 id="psfmachine.machine.Machine.build_shape_model" class="doc doc-heading">
-<code class="highlight language-python"><span class="n">build_shape_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">plot</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">flux_cut_off</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span></code>
+<code class="highlight language-python"><span class="n">build_shape_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">plot</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">flux_cut_off</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">frame_index</span><span class="o">=</span><span class="s1">&#39;mean&#39;</span><span class="p">,</span> <span class="n">bin_data</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></code>
 
 
 </h2>
@@ -644,10 +1003,35 @@ build the PSF model</p></td>
   </thead>
   <tbody>
       <tr>
+        <td><code>plot</code></td>
+        <td><code>boolean</code></td>
+        <td><p>Make a diagnostic plot</p></td>
+        <td><code>False</code></td>
+      </tr>
+      <tr>
         <td><code>flux_cut_off</code></td>
         <td><code>float</code></td>
         <td><p>the flux in COUNTS at which to stop evaluating the model!</p></td>
         <td><code>1</code></td>
+      </tr>
+      <tr>
+        <td><code>frame_index</code></td>
+        <td><code>string or int</code></td>
+        <td><p>The frame index used to build the shape model, if "mean" then use the
+mean value across time</p></td>
+        <td><code>&#39;mean&#39;</code></td>
+      </tr>
+      <tr>
+        <td><code>bin_data</code></td>
+        <td><code>boolean</code></td>
+        <td><p>Bin flux data spatially to increase SNR before fitting the shape model</p></td>
+        <td><code>False</code></td>
+      </tr>
+      <tr>
+        <td><code>**kwargs</code></td>
+        <td><code>None</code></td>
+        <td><p>Keyword arguments to be passed to <code>_get_source_mask()</code></p></td>
+        <td><code>{}</code></td>
       </tr>
   </tbody>
 </table>
@@ -655,6 +1039,217 @@ build the PSF model</p></td>
 
   </div>
 
+
+
+  <div class="doc doc-object doc-method">
+
+
+
+<h2 id="psfmachine.machine.Machine.build_time_model" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">build_time_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">plot</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">bin_method</span><span class="o">=</span><span class="s1">&#39;bin&#39;</span><span class="p">,</span> <span class="n">poly_order</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">segments</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">focus</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">focus_exptime</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">pca_ncomponents</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">pca_smooth_time_scale</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">positions</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">other_vectors</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+
+</h2>
+
+    <div class="doc doc-contents ">
+
+      <p>Builds a time model that moves the PRF model to account for the scene movement</p>
+<p>due to velocity aberration. It has two methods to choose from using the
+attribute <code>self.time_corrector</code>, if <code>"polynomial"</code> (default) will use a
+polynomial in time, if <code>"poscorr"</code> will use the pos_corr vectos that can be found
+in the TPFs. The time polynomial gives a more flexible model vs the pos_corr
+option, but can lead to light curves with "weird" long-term trends. Using
+pos_corr is recomended for Kepler data.</p>
+
+<p><strong>Parameters:</strong></p>
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+      <th>Default</th>
+    </tr>
+  </thead>
+  <tbody>
+      <tr>
+        <td><code>plot</code></td>
+        <td><code>boolean</code></td>
+        <td><p>Plot a diagnostic figure.</p></td>
+        <td><code>False</code></td>
+      </tr>
+      <tr>
+        <td><code>bin_method</code></td>
+        <td><code>string</code></td>
+        <td><p>Type of bin method, options are "bin" and "downsample".</p></td>
+        <td><code>&#39;bin&#39;</code></td>
+      </tr>
+      <tr>
+        <td><code>poly_order</code></td>
+        <td><code>int</code></td>
+        <td><p>Degree of the time polynomial used for the time model. Default is 3.</p></td>
+        <td><code>3</code></td>
+      </tr>
+      <tr>
+        <td><code>segments</code></td>
+        <td><code>boolean</code></td>
+        <td><p>If <code>True</code> will split the light curve into segments to fit different time
+models with a common pixel normalization. If <code>False</code> will fit the full
+time series as one segment. Segments breaks are infered from time
+discontinuities.</p></td>
+        <td><code>False</code></td>
+      </tr>
+      <tr>
+        <td><code>focus</code></td>
+        <td><code>boolean</code></td>
+        <td><p>Add a component that models th focus change at the begining of a segment.</p></td>
+        <td><code>False</code></td>
+      </tr>
+      <tr>
+        <td><code>focus_exptime</code></td>
+        <td><code>int</code></td>
+        <td><p>Characteristic decay for focus component modeled as exponential decay when
+<code>focus</code> is True. In the same units as <code>PerturbationMatrix3D.time</code>.</p></td>
+        <td><code>50</code></td>
+      </tr>
+      <tr>
+        <td><code>pca_ncomponents</code></td>
+        <td><code>int</code></td>
+        <td><p>Number of PCA components used in <code>PerturbationMatrix3D</code>. The components are
+derived from pixel light lighrcurves.</p></td>
+        <td><code>0</code></td>
+      </tr>
+      <tr>
+        <td><code>pca_smooth_time_scale</code></td>
+        <td><code>float</code></td>
+        <td><p>Smooth time sacel for PCA components.</p></td>
+        <td><code>0</code></td>
+      </tr>
+      <tr>
+        <td><code>positions</code></td>
+        <td><code>boolean or string</code></td>
+        <td><p>If one of strings <code>"poscorr", "centroid"</code> then the perturbation matrix will
+add other vectors accounting for position shift.</p></td>
+        <td><code>False</code></td>
+      </tr>
+      <tr>
+        <td><code>other_vectors</code></td>
+        <td><code>list or numpy.ndarray</code></td>
+        <td><p>Set of other components used to include  in the perturbed model.
+See <code>psfmachine.perturbation.PerturbationMatrix</code> object for details.
+Posible use case are using Kepler CBVs or engeneering data. Shape has to be
+(ncomponents, ntimes). Default is <code>None</code>.</p></td>
+        <td><code>None</code></td>
+      </tr>
+  </tbody>
+</table>
+    </div>
+
+  </div>
+
+
+
+  <div class="doc doc-object doc-method">
+
+
+
+<h2 id="psfmachine.machine.Machine.compute_aperture_photometry" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">compute_aperture_photometry</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">aperture_size</span><span class="o">=</span><span class="s1">&#39;optimal&#39;</span><span class="p">,</span> <span class="n">target_complete</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">target_crowd</span><span class="o">=</span><span class="mf">0.9</span><span class="p">)</span></code>
+
+
+</h2>
+
+    <div class="doc doc-contents ">
+
+      <p>Computes aperture photometry for all sources in the scene. The aperture shape</p>
+<p>follow the PRF profile.</p>
+
+<p><strong>Parameters:</strong></p>
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+      <th>Default</th>
+    </tr>
+  </thead>
+  <tbody>
+      <tr>
+        <td><code>aperture_size</code></td>
+        <td><code>string or int</code></td>
+        <td><p>Size of the aperture to be used. If "optimal" the aperture will be optimized
+using the flux metric targets. If int between [0, 100], then the boundaries
+of the aperture are calculated from the normalized flux value of the given
+ith percentile.</p></td>
+        <td><code>&#39;optimal&#39;</code></td>
+      </tr>
+      <tr>
+        <td><code>target_complete</code></td>
+        <td><code>float</code></td>
+        <td><p>Target flux completeness metric (FLFRCSAP) used if aperture_size is
+ "optimal".</p></td>
+        <td><code>0.9</code></td>
+      </tr>
+      <tr>
+        <td><code>target_crowd</code></td>
+        <td><code>float</code></td>
+        <td><p>Target flux crowding metric (CROWDSAP) used if aperture_size is "optimal".</p></td>
+        <td><code>0.9</code></td>
+      </tr>
+  </tbody>
+</table>
+    </div>
+
+  </div>
+
+
+
+  <div class="doc doc-object doc-method">
+
+
+
+<h2 id="psfmachine.machine.Machine.create_aperture_mask" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">create_aperture_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">percentile</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span></code>
+
+
+</h2>
+
+    <div class="doc doc-contents ">
+
+      <p>Function to create the aperture mask of a given source for a given aperture</p>
+<p>size. This function can compute aperutre mask for all sources in the scene.</p>
+<p>It creates three new attributes:
+    * <code>self.aperture_mask</code> has the aperture mask, shape is [n_surces, n_pixels]
+    * <code>self.FLFRCSAP</code> has the completeness metric, shape is [n_sources]
+    * <code>self.CROWDSAP</code> has the crowdeness metric, shape is [n_sources]</p>
+
+<p><strong>Parameters:</strong></p>
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+      <th>Default</th>
+    </tr>
+  </thead>
+  <tbody>
+      <tr>
+        <td><code>percentile</code></td>
+        <td><code>float or list of floats</code></td>
+        <td><p>Percentile value that defines the isophote from the distribution
+of values in the PRF model of the source. If float, then
+all sources will use the same percentile value. If list, then it has to
+have lenght that matches <code>self.nsources</code>, then each source has its own
+percentile value.</p></td>
+        <td><code>50</code></td>
+      </tr>
+  </tbody>
+</table>
+    </div>
+
+  </div>
 
 
 
@@ -672,6 +1267,117 @@ build the PSF model</p></td>
 
       <p>Finds the best fitting weights for every source, simultaneously</p>
 
+<p><strong>Parameters:</strong></p>
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+      <th>Default</th>
+    </tr>
+  </thead>
+  <tbody>
+      <tr>
+        <td><code>fit_va</code></td>
+        <td><code>boolean</code></td>
+        <td><p>Fitting model accounting for velocity aberration. If <code>True</code>, then a time
+model has to be built previously with <code>build_time_model</code>.</p></td>
+        <td><code>False</code></td>
+      </tr>
+  </tbody>
+</table>
+    </div>
+
+  </div>
+
+
+
+  <div class="doc doc-object doc-method">
+
+
+
+<h2 id="psfmachine.machine.Machine.get_psf_metrics" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">get_psf_metrics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">npoints_per_pixel</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span></code>
+
+
+</h2>
+
+    <div class="doc doc-contents ">
+
+      <p>Computes three metrics for the PSF model:</p>
+<p>source_psf_fraction: the amount of PSF in the data. Tells how much of a
+        sources is used to estimate the PSF, values are in between [0, 1].
+    perturbed_ratio_mean: the ratio between the mean model and perturbed model
+        for each source. Usefull to find when the time model affects the
+        mean value of the light curve.
+    perturbed_std: the standard deviation of the perturbed model for each
+        source. USeful to find when the time model introduces variability in the
+        light curve.</p>
+<p>If npoints_per_pixel &gt; 0, it creates high npoints_per_pixel shape models for
+each source by dividing each pixels into a grid of
+[npoints_per_pixel x npoints_per_pixel]. This provides a better estimate of
+<code>source_psf_fraction</code>.</p>
+
+<p><strong>Parameters:</strong></p>
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+      <th>Default</th>
+    </tr>
+  </thead>
+  <tbody>
+      <tr>
+        <td><code>npoints_per_pixel</code></td>
+        <td><code>int</code></td>
+        <td><p>Value in which each pixel axis is split to increase npoints_per_pixel.
+Default is 0 for no subpixel npoints_per_pixel.</p></td>
+        <td><code>10</code></td>
+      </tr>
+  </tbody>
+</table>
+    </div>
+
+  </div>
+
+
+
+  <div class="doc doc-object doc-method">
+
+
+
+<h2 id="psfmachine.machine.Machine.perturbed_model" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">perturbed_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">time_index</span><span class="p">)</span></code>
+
+
+</h2>
+
+    <div class="doc doc-contents ">
+
+      <p>Computes the perturbed model at a given time</p>
+
+<p><strong>Parameters:</strong></p>
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+      <th>Default</th>
+    </tr>
+  </thead>
+  <tbody>
+      <tr>
+        <td><code>time_index</code></td>
+        <td><code>int or np.ndarray</code></td>
+        <td><p>Time index where to evaluate the perturbed model.</p></td>
+        <td><em>required</em></td>
+      </tr>
+  </tbody>
+</table>
     </div>
 
   </div>
@@ -683,19 +1389,94 @@ build the PSF model</p></td>
 
 
 <h2 id="psfmachine.machine.Machine.plot_shape_model" class="doc doc-heading">
-<code class="highlight language-python"><span class="n">plot_shape_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">radius</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span></code>
+<code class="highlight language-python"><span class="n">plot_shape_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">frame_index</span><span class="o">=</span><span class="s1">&#39;mean&#39;</span><span class="p">,</span> <span class="n">bin_data</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
 
 
 </h2>
 
     <div class="doc doc-contents ">
 
-      <p>Diagnostic plot of shape model...</p>
+      <p>Diagnostic plot of shape model.</p>
 
+<p><strong>Parameters:</strong></p>
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Description</th>
+      <th>Default</th>
+    </tr>
+  </thead>
+  <tbody>
+      <tr>
+        <td><code>frame_index</code></td>
+        <td><code>string or int</code></td>
+        <td><p>The frame index used to plot the shape model, if "mean" then use the
+mean value across time</p></td>
+        <td><code>&#39;mean&#39;</code></td>
+      </tr>
+      <tr>
+        <td><code>bin_data</code></td>
+        <td><code>bool</code></td>
+        <td><p>Bin or not the pixel data in a 2D historgram, default is False.</p></td>
+        <td><code>False</code></td>
+      </tr>
+  </tbody>
+</table>
+<p><strong>Returns:</strong></p>
+<table>
+  <thead>
+    <tr>
+      <th>Type</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>matplotlib.Figure</code></td>
+      <td><p>Figure.</p></td>
+    </tr>
+  </tbody>
+</table>
     </div>
 
   </div>
 
+
+
+  <div class="doc doc-object doc-method">
+
+
+
+<h2 id="psfmachine.machine.Machine.plot_time_model" class="doc doc-heading">
+<code class="highlight language-python"><span class="n">plot_time_model</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span></code>
+
+
+</h2>
+
+    <div class="doc doc-contents ">
+
+      <p>Diagnostic plot of time model.</p>
+
+<p><strong>Returns:</strong></p>
+<table>
+  <thead>
+    <tr>
+      <th>Type</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>matplotlib.Figure</code></td>
+      <td><p>Figure.</p></td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+  </div>
 
 
 
@@ -716,6 +1497,7 @@ build the PSF model</p></td>
             </article>
           </div>
         </div>
+        
       </main>
       
         
@@ -723,7 +1505,8 @@ build the PSF model</p></td>
   
     <nav class="md-footer__inner md-grid" aria-label="Footer">
       
-        <a href=".." class="md-footer__link md-footer__link--prev" rel="prev">
+        
+        <a href=".." class="md-footer__link md-footer__link--prev" aria-label="Previous: Home" rel="prev">
           <div class="md-footer__button md-icon">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12z"/></svg>
           </div>
@@ -738,7 +1521,8 @@ build the PSF model</p></td>
         </a>
       
       
-        <a href="../tpf/" class="md-footer__link md-footer__link--next" rel="next">
+        
+        <a href="../tpf/" class="md-footer__link md-footer__link--next" aria-label="Next: TPFMachine" rel="next">
           <div class="md-footer__title">
             <div class="md-ellipsis">
               <span class="md-footer__direction">
@@ -758,10 +1542,12 @@ build the PSF model</p></td>
     <div class="md-footer-meta__inner md-grid">
       <div class="md-footer-copyright">
         
-        Made with
-        <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
-          Material for MkDocs
-        </a>
+        
+          Made with
+          <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+            Material for MkDocs
+          </a>
+        
         
       </div>
       
@@ -773,10 +1559,10 @@ build the PSF model</p></td>
     <div class="md-dialog" data-md-component="dialog">
       <div class="md-dialog__inner md-typeset"></div>
     </div>
-    <script id="__config" type="application/json">{"base": "..", "features": [], "translations": {"clipboard.copy": "Copy to clipboard", "clipboard.copied": "Copied to clipboard", "search.config.lang": "en", "search.config.pipeline": "trimmer, stopWordFilter", "search.config.separator": "[\\s\\-]+", "search.placeholder": "Search", "search.result.placeholder": "Type to start searching", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.term.missing": "Missing"}, "search": "../assets/javascripts/workers/search.fb4a9340.min.js", "version": null}</script>
+    <script id="__config" type="application/json">{"base": "..", "features": [], "translations": {"clipboard.copy": "Copy to clipboard", "clipboard.copied": "Copied to clipboard", "search.config.lang": "en", "search.config.pipeline": "trimmer, stopWordFilter", "search.config.separator": "[\\s\\-]+", "search.placeholder": "Search", "search.result.placeholder": "Type to start searching", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.term.missing": "Missing", "select.version.title": "Select version"}, "search": "../assets/javascripts/workers/search.f8263e09.min.js", "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.a1c7c35e.min.js"></script>
+      <script src="../assets/javascripts/bundle.4fc53ad4.min.js"></script>
       
     
   </body>
