@@ -48,7 +48,6 @@ class Machine(object):
         sources,
         column,
         row,
-        limit_radius=24.0,
         time_mask=None,
         n_r_knots=10,
         n_phi_knots=15,
@@ -80,8 +79,6 @@ class Machine(object):
             Data array containing the "columns" of the detector that each pixel is on.
         row: np.ndarray
             Data array containing the "rows" of the detector that each pixel is on.
-        limit_radius: numpy.ndarray
-            Radius limit in arcsecs to select stars to be used for PRF modeling
         time_mask:  np.ndarray of booleans
             A boolean array of shape time. Only values where this mask is `True`
             will be used to calculate the average image for fitting the PSF.
@@ -163,7 +160,6 @@ class Machine(object):
         self.sources = sources
         self.column = column
         self.row = row
-        self.limit_radius = limit_radius * u.arcsecond
         self.limit_flux = 1e4
         self.n_r_knots = n_r_knots
         self.n_phi_knots = n_phi_knots
@@ -1403,7 +1399,7 @@ class Machine(object):
         dy = dy.data * u.deg.to(u.arcsecond)
 
         radius = np.maximum(np.abs(dx).max(), np.abs(dy).max()) * 1.1
-        vmin, vmax = np.nanpercentile(mean_f, [5, 90])
+        vmin, vmax = np.nanpercentile(mean_f, [5, 95])
 
         if bin_data:
             nbins = 30 if mean_f.shape[0] <= 5e3 else 90
