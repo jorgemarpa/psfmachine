@@ -478,10 +478,25 @@ class FFIMachine(Machine):
 
         return
 
-    def _remove_background(self, mask=None):
+    def _remove_background(self):
         """
-        Background removal. It models the background using a median estimator, rejects
-        flux values with sigma clipping. It modiffies the attributes `flux` and
+        Background removal
+        """
+
+        if self.meta["TELESCOP"].lower() in ["kepler", "k2", "ktwo"]:
+            self._remove_background_kepler()
+        elif self.meta["TELESCOP"].lower() == "tess":
+            self._remove_background_kepler()
+            # self._remove_background_tess()
+        else:
+            raise ValueError(
+                "Background removal method only for Kepler and TESS missions"
+            )
+
+    def _remove_background_kepler(self, mask=None):
+        """
+        Kepler background removal. It models the background using a median estimator,
+        rejects flux values with sigma clipping. It modiffies the attributes `flux` and
         `flux_2d`. The background model are stored in the `background_model` attribute.
 
         Parameters
@@ -514,6 +529,9 @@ class FFIMachine(Machine):
 
             self.flux = flux_2d_corr.reshape(self.flux_2d.shape[0], -1)
             self.meta["BACKAPP"] = True
+        return
+
+    def _remove_background_tess(self, mask=None):
         return
 
     def _saturated_pixels_mask(self, saturation_limit=1.5e5, tolerance=3):
