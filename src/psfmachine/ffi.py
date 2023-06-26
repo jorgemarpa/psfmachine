@@ -57,6 +57,7 @@ class FFIMachine(Machine):
         rmax=16,
         sparse_dist_lim=40,
         quality_mask=None,
+        cadenceno=None,
         meta=None,
     ):
         """
@@ -143,6 +144,7 @@ class FFIMachine(Machine):
             self.quality_mask = np.zeros(len(time), dtype=int)
         else:
             self.quality_mask = quality_mask
+        self.cadenceno = cadenceno
 
     @property
     def flux_2d(self):
@@ -211,6 +213,7 @@ class FFIMachine(Machine):
             row,
             metadata,
             quality_mask,
+            cadenceno,
         ) = _load_file(
             fname,
             extension=extension,
@@ -262,6 +265,7 @@ class FFIMachine(Machine):
             wcs=wcs,
             meta=metadata,
             quality_mask=quality_mask,
+            cadenceno=cadenceno,
             **kwargs,
         )
 
@@ -617,16 +621,24 @@ class FFIMachine(Machine):
             saturation_limit=pixel_saturation_limit
         )
         # tolerance dependens on pixel scale, TESS pixels are 5 times larger than TESS
-        tolerance = 5 if self.meta["MISSION"] == "TESS" else 25
+        tolerance = 5 if self.meta["MISSION"] == "TESS" else 30
         self.non_bright_source_mask = ~self._bright_sources_mask(
             magnitude_limit=magnitude_bright_limit, tolerance=tolerance
         )
         self.pixel_mask = self.non_sat_pixel_mask & self.non_bright_source_mask
 
         if not hasattr(self, "source_mask"):
-            self._get_source_mask()
-            # include saturated pixels in the source mask and uncontaminated mask
-            self._remove_bad_pixels_from_source_mask()
+            if self.meta["TELESCOP"] == "TESS":
+                self._get_source_mask(
+                    upper_radius_limit=180.0,
+                    lower_radius_limit=5,
+                    upper_flux_limit=5e5,
+                    lower_flux_limit=100,
+                )
+            else:
+                self._get_source_mask()
+        # include saturated pixels in the source mask and uncontaminated mask
+        self._remove_bad_pixels_from_source_mask()
 
         return
 
@@ -643,7 +655,7 @@ class FFIMachine(Machine):
         Adapted version of `machine._get_source_mask()` that masks out saturated and
         bright halo pixels in FFIs. See parameter descriptions in `Machine`.
         """
-        super()._get_source_mask(
+        aux = super()._get_source_mask(
             upper_radius_limit=upper_radius_limit,
             lower_radius_limit=lower_radius_limit,
             upper_flux_limit=upper_flux_limit,
@@ -651,7 +663,10 @@ class FFIMachine(Machine):
             correct_centroid_offset=correct_centroid_offset,
             plot=plot,
         )
-        self._remove_bad_pixels_from_source_mask()
+        if hasattr(self, "pixel_mask"):
+            self._remove_bad_pixels_from_source_mask()
+
+        return aux
 
     def build_shape_model(
         self, plot=False, flux_cut_off=1, frame_index="mean", bin_data=False, **kwargs
@@ -860,7 +875,7 @@ class FFIMachine(Machine):
                 linewidths=0.5 if self.sources.shape[0] > 1000 else 1,
                 alpha=0.9,
             )
-        return ax
+        return fig
 
     def plot_pixel_masks(self, ax=None):
         """
@@ -904,7 +919,7 @@ class FFIMachine(Machine):
         ax.set_ylabel("Row Pixel Number")
         ax.set_title("Pixel Mask")
 
-        return ax
+        return fig
 
 
 def _load_file(fname, extension=1, cutout_size=256, cutout_origin=[0, 0]):
@@ -1042,6 +1057,7 @@ def _load_file(fname, extension=1, cutout_size=256, cutout_origin=[0, 0]):
             "CAMERA": extensions[0],
             "QUARTER": quarters[0],
             "CAMPAIGN": quarters[0],
+            "SECTOR": quarters[0],
             "DCT_TYPE": "FFI",
         }
     )
@@ -1082,6 +1098,7 @@ def _load_file(fname, extension=1, cutout_size=256, cutout_origin=[0, 0]):
         row_2d,
         meta,
         quality_mask,
+        cadenceno,
     )
 
 
