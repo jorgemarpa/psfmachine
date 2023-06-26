@@ -159,7 +159,9 @@ def do_tiled_query(ra, dec, ngrid=(5, 5), magnitude_limit=18, epoch=2020, dr=3):
     return sources.reset_index(drop=True)
 
 
-def _make_A_polar(phi, r, cut_r=6, rmin=1, rmax=18, n_r_knots=12, n_phi_knots=15):
+def _make_A_polar(
+    phi, r, cut_r=6, rmin=1, rmax=18, n_r_knots=12, n_phi_knots=15, degree=3
+):
     """
     Creates a design matrix (DM) in polar coordinates (r, phi). It will enforce r-only
     dependency within `cut_r` radius. This is useful when less data points are available
@@ -189,14 +191,20 @@ def _make_A_polar(phi, r, cut_r=6, rmin=1, rmax=18, n_r_knots=12, n_phi_knots=15
         A DM with bspline basis in polar coordinates.
     """
     # create the spline bases for radius and angle
-    phi_spline = sparse.csr_matrix(wrapped_spline(phi, order=3, nknots=n_phi_knots).T)
+    phi_spline = sparse.csr_matrix(
+        wrapped_spline(phi, degree=degree, nknots=n_phi_knots).T
+    )
     r_knots = np.linspace(rmin ** 0.5, rmax ** 0.5, n_r_knots) ** 2
     cut_r_int = np.where(r_knots <= cut_r)[0].max()
     r_spline = sparse.csr_matrix(
         np.asarray(
             dmatrix(
-                "bs(x, knots=knots, degree=3, include_intercept=True)",
-                {"x": list(np.hstack([r, rmin, rmax])), "knots": r_knots},
+                "bs(x, knots=knots, degree=degree, include_intercept=True)",
+                {
+                    "x": list(np.hstack([r, rmin, rmax])),
+                    "knots": r_knots,
+                    "degree": degree,
+                },
             )
         )
     )[:-2]
@@ -303,7 +311,7 @@ def _make_A_cartesian(x, y, n_knots=10, radius=3.0, knot_spacing_type="sqrt", de
     return X
 
 
-def wrapped_spline(input_vector, order=2, nknots=10):
+def wrapped_spline(input_vector, degree=3, nknots=10):
     """
     Creates a vector of folded-spline basis according to the input data. This is meant
     to be used to build the basis vectors for periodic data, like the angle in polar
@@ -340,7 +348,7 @@ def wrapped_spline(input_vector, order=2, nknots=10):
         ]
     )
     # Higher order basis
-    for order in np.arange(1, 4):
+    for order in np.arange(1, degree + 1):
         basis_1 = []
         for idx in range(len(t) - 1):
             a = ((x1 - t[idx]) / (dt * order)) * basis[idx]
@@ -820,14 +828,14 @@ def _load_ffi_image(
         # CCD overscan for TESS
         r_min = 0
         r_max = 2048
-        c_min = 45
-        c_max = 2093
+        c_min = 44
+        c_max = 2092
     else:
         raise TypeError("File is not from Kepler or TESS mission")
 
     # If the image dimension is not the FFI shape, we change the r_max and c_max
     dims = f.get_dims()
-    if dims != [r_max, c_max]:
+    if dims == [r_max, c_max]:
         r_max, c_max = np.asarray(dims)
     r_min += cutout_origin[0]
     c_min += cutout_origin[1]

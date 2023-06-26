@@ -996,13 +996,13 @@ class Machine(object):
         #     .data
         # )
         # We only need these weights for the wings, so we'll use poisson noise
-        mean_f_err = (
+        mean_f_err = np.abs(
             self.uncontaminated_source_mask.astype(float)
             .multiply((f ** 0.5) / (f * np.log(10)))
             .multiply(1 / flux_estimates)
             .data
         )
-        mean_f_err.data = np.abs(mean_f_err.data)
+        # mean_f_err.data = np.abs(mean_f_err.data)
 
         # take value from Quantity is not necessary
         phi_b = self.uncontaminated_source_mask.multiply(self.phi).data
