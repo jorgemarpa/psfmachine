@@ -652,6 +652,7 @@ class FFIMachine(Machine):
                     lower_radius_limit=5,
                     upper_flux_limit=5e5,
                     lower_flux_limit=100,
+                    correct_centroid_offset=False,
                 )
             else:
                 self._get_source_mask()
