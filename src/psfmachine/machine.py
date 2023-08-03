@@ -13,6 +13,7 @@ from astropy.stats import sigma_clip
 
 from .utils import (
     _make_A_polar,
+    _make_A_polar_quarter,
     solve_linear_model,
     sparse_lessthan,
     threshold_bin,
@@ -601,13 +602,21 @@ class Machine(object):
         self.dec_centroid = np.zeros(self.nt)
         dra_m = self.uncontaminated_source_mask.multiply(self.dra).data
         ddec_m = self.uncontaminated_source_mask.multiply(self.ddec).data
+        mean_f = np.log10(
+            self.uncontaminated_source_mask.astype(float)
+            .multiply(self.flux[self.time_mask].mean(axis=0))
+            .multiply(1 / self.source_flux_estimates[:, None])
+            .data
+        )
         for t in range(self.nt):
             wgts = self.uncontaminated_source_mask.multiply(
                 np.sqrt(np.abs(self.flux[t]))
             ).data
             # mask out non finite values and background pixels
-            k = (np.isfinite(wgts)) & (
-                self.uncontaminated_source_mask.multiply(self.flux[t]).data > 100
+            k = (
+                (np.isfinite(wgts))
+                & (self.uncontaminated_source_mask.multiply(self.flux[t]).data > 100)
+                & (mean_f > -1.3)
             )
             self.ra_centroid[t] = np.average(dra_m[k], weights=wgts[k])
             self.dec_centroid[t] = np.average(ddec_m[k], weights=wgts[k])
@@ -945,7 +954,13 @@ class Machine(object):
         return fig1, fig2
 
     def build_shape_model(
-        self, plot=False, flux_cut_off=1, frame_index="mean", bin_data=False, **kwargs
+        self,
+        plot=False,
+        flux_cut_off=1,
+        frame_index="mean",
+        bin_data=False,
+        location_dependency=False,
+        **kwargs,
     ):
         """
         Builds a sparse model matrix of shape nsources x npixels to be used when
@@ -1035,6 +1050,67 @@ class Machine(object):
             n_r_knots=self.n_r_knots,
             n_phi_knots=self.n_phi_knots,
         )
+        self.location_dependency = location_dependency
+        if location_dependency:
+            if not hasattr(self, "ra0"):
+                self.ra0, self.dec0 = self.ra.mean(), self.dec.mean()
+
+            self.dra0 = self.source_mask.astype(float).multiply(self.ra - self.ra0)
+            self.ddec0 = self.source_mask.astype(float).multiply(self.dec - self.dec0)
+            # self.dra0 = self.source_mask.astype(float).multiply(self.column - self.ra0)
+            # self.ddec0 = self.source_mask.astype(float).multiply(self.row - self.dec0)
+
+            nnz_inds = self.source_mask.nonzero()
+            # rho in deg
+            rho_vals = np.hypot(self.dra0.data, self.ddec0.data)
+            theta_vals = np.arctan2(self.ddec0.data, self.dra0.data)
+            self.rho = sparse.csr_matrix(
+                (rho_vals, (nnz_inds[0], nnz_inds[1])),
+                shape=self.source_mask.shape,
+                dtype=float,
+            )
+            self.theta = sparse.csr_matrix(
+                (theta_vals, (nnz_inds[0], nnz_inds[1])),
+                shape=self.source_mask.shape,
+                dtype=float,
+            )
+            theta_b = self.uncontaminated_source_mask.multiply(self.theta).data
+            rho_b = self.uncontaminated_source_mask.multiply(self.rho).data
+
+            # params when using radec
+            self.rhomin = 2 + 1e-5
+            self.rhomax = 4
+            self.cut_rho = 2.2
+            self.n_rho_knots = 4
+            self.n_theta_knots = 4
+
+            # params when using colrow
+            # self.rhomin = 10 + 1e-4
+            # self.rhomax = 2500
+            # self.cut_rho = 750
+            # self.n_rho_knots = 4
+            # self.n_theta_knots = 4
+            # self.phimin = np.percentile(theta_b, 3)
+            # self.phimax = np.percentile(theta_b, 97)
+
+            A0 = _make_A_polar(
+                theta_b.ravel(),
+                rho_b.ravel(),
+                # phimin=self.phimin,
+                # phimax=self.phimax,
+                rmin=self.rhomin,
+                rmax=self.rhomax,
+                cut_r=self.cut_rho,
+                n_r_knots=self.n_rho_knots,
+                n_phi_knots=self.n_theta_knots,
+            )
+            print(A.shape, A0.shape)
+            A = sparse.hstack(
+                [A.multiply(A0[:, idx]) for idx in range(A0.shape[1])],
+                format="csr",
+            )
+            print(A.shape)
+
         prior_sigma = np.ones(A.shape[1]) * 10
         prior_mu = np.zeros(A.shape[1]) - 10
 
@@ -1163,6 +1239,22 @@ class Machine(object):
             n_r_knots=self.n_r_knots,
             n_phi_knots=self.n_phi_knots,
         )
+        if self.location_dependency:
+            A0 = _make_A_polar(
+                self.source_mask.multiply(self.theta).data,
+                self.source_mask.multiply(self.rho).data,
+                # phimin=self.phimin,
+                # phimax=self.phimax,
+                rmin=self.rhomin,
+                rmax=self.rhomax,
+                cut_r=self.cut_rho,
+                n_r_knots=self.n_rho_knots,
+                n_phi_knots=self.n_theta_knots,
+            )
+            Ap = sparse.hstack(
+                [Ap.multiply(A0[:, idx]) for idx in range(A0.shape[1])],
+                format="csr",
+            )
 
         # And create a `mean_model` that has the psf model for all pixels with fluxes
         mean_model = sparse.csr_matrix(self.r.shape)
@@ -1200,6 +1292,26 @@ class Machine(object):
             n_r_knots=self.n_r_knots,
             n_phi_knots=self.n_phi_knots,
         )
+        if self.location_dependency:
+            rho = self.source_mask.multiply(self.rho).data
+            theta_hd = np.linspace(-np.pi, np.pi, npoints)
+            rho_hd = np.linspace(0, rho.max(), npoints)
+            theta_hd, rho_hd = np.meshgrid(theta_hd, rho_hd)
+            A0 = _make_A_polar(
+                theta_hd.ravel(),
+                rho_hd.ravel(),
+                # phimin=self.phimin,
+                # phimax=self.phimax,
+                rmin=self.rhomin,
+                rmax=self.rhomax,
+                cut_r=self.cut_rho,
+                n_r_knots=self.n_rho_knots,
+                n_phi_knots=self.n_theta_knots,
+            )
+            Ap = sparse.hstack(
+                [Ap.multiply(A0[:, idx]) for idx in range(A0.shape[1])],
+                format="csr",
+            )
         # evaluate the high res model
         mean_model_hd = Ap.dot(self.psf_w)
         mean_model_hd[~np.isfinite(mean_model_hd)] = np.nan
@@ -1458,6 +1570,23 @@ class Machine(object):
             n_r_knots=self.n_r_knots,
             n_phi_knots=self.n_phi_knots,
         )
+        if self.location_dependency:
+            A0 = _make_A_polar(
+                self.uncontaminated_source_mask.multiply(self.theta).data,
+                self.uncontaminated_source_mask.multiply(self.rho).data,
+                # phimin=self.phimin,
+                # phimax=self.phimax,
+                rmin=self.rhomin,
+                rmax=self.rhomax,
+                cut_r=self.cut_rho,
+                n_r_knots=self.n_rho_knots,
+                n_phi_knots=self.n_theta_knots,
+            )
+            A = sparse.hstack(
+                [A.multiply(A0[:, idx]) for idx in range(A0.shape[1])],
+                format="csr",
+            )
+
         # if the mean model is normalized, we revert it only for plotting to make
         # easier the comparisson between the data and model.
         # the normalization is a multiplicative factor

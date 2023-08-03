@@ -2,6 +2,7 @@
 import os
 import logging
 import numpy as np
+from scipy import sparse
 
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
@@ -139,7 +140,7 @@ class FFIMachine(Machine):
             rmax=rmax,
             sparse_dist_lim=sparse_dist_lim,
         )
-        self._mask_pixels()
+        # self._mask_pixels()
         if quality_mask is None:
             self.quality_mask = np.zeros(len(time), dtype=int)
         else:
@@ -164,6 +165,7 @@ class FFIMachine(Machine):
         magnitude_limit=18,
         dr=3,
         sources=None,
+        return_sources=False,
         **kwargs,
     ):
         """
@@ -252,6 +254,8 @@ class FFIMachine(Machine):
                 plot=plot_offsets,
                 cutout_size=100,
             )
+        if return_sources:
+            return sources
 
         return FFIMachine(
             time.jd,
@@ -327,10 +331,36 @@ class FFIMachine(Machine):
         # spline degree is hardcoded in `_make_A_polar` implementation.
         table.header["spln_deg"] = (3, "Degree of the spline basis")
         table.header["norm"] = (str(False), "Normalized model")
+        table.header["posdep"] = (
+            str(self.location_dependency),
+            "Is PSF position dependant",
+        )
+        table.header["ra0"] = (
+            self.ra0 if self.location_dependency else None,
+            "Zero point for relative RA position",
+        )
+        table.header["dec0"] = (
+            self.dec0 if self.location_dependency else None,
+            "Zero point for relative Dec position",
+        )
+        table.header["rhomin"] = (self.rhomin, "Minimum value for knot spacing")
+        table.header["rhomax"] = (self.rhomax, "Maximum value for knot spacing")
+        table.header["cut_rho"] = (
+            self.cut_rho,
+            "Radial distance to remove angle dependency",
+        )
+        table.header["nrhoknt"] = (
+            self.n_rho_knots,
+            "Number of knots for spline basis in radial axis",
+        )
+        table.header["nthetknt"] = (
+            self.n_theta_knots,
+            "Number of knots for spline basis in angle axis",
+        )
 
         table.writeto(output, checksum=True, overwrite=True)
 
-    def load_shape_model(self, input=None, plot=False):
+    def load_shape_model(self, input=None, plot=False, **kwargs):
         """
         Loads a PRF model from disk.
 
@@ -384,13 +414,37 @@ class FFIMachine(Machine):
         self.normalized_shape_model = (
             True if hdu[1].header.get("norm") in ["True", "T", 1] else False
         )
+        self.location_dependency = (
+            True if hdu[1].header.get("posdep") in ["True", "T", 1] else False
+        )
+        self.ra0 = hdu[1].header.get("ra0")
+        self.dec0 = hdu[1].header.get("dec0")
         del hdu
+
+        if self.location_dependency:
+            self.dra0 = self.source_mask.astype(float).multiply(self.ra - self.ra0)
+            self.ddec0 = self.source_mask.astype(float).multiply(self.dec - self.dec0)
+
+            nnz_inds = self.source_mask.nonzero()
+            # rho in deg
+            rho_vals = np.hypot(self.dra0.data, self.ddec0.data)
+            theta_vals = np.arctan2(self.ddec0.data, self.dra0.data)
+            self.rho = sparse.csr_matrix(
+                (rho_vals, (nnz_inds[0], nnz_inds[1])),
+                shape=self.source_mask.shape,
+                dtype=float,
+            )
+            self.theta = sparse.csr_matrix(
+                (theta_vals, (nnz_inds[0], nnz_inds[1])),
+                shape=self.source_mask.shape,
+                dtype=float,
+            )
 
         # create mean model, but PRF shapes from FFI are in pixels! and TPFMachine
         # work in arcseconds
         self._get_mean_model()
         # remove background pixels and recreate mean model
-        self._update_source_mask_remove_bkg_pixels()
+        self._update_source_mask_remove_bkg_pixels(**kwargs)
 
         if plot:
             return self.plot_shape_model()
@@ -610,19 +664,25 @@ class FFIMachine(Machine):
 
         return mask
 
-    def _remove_bad_pixels_from_source_mask(self):
+    def _remove_bad_pixels_from_source_mask(self, magnitude_bright_limit=8):
         """
         Combines source_mask and uncontaminated_pixel_mask with saturated and bright
-        pixel mask.
+        pixel mask and remove birght sources rows from masks.
         """
         self.source_mask = self.source_mask.multiply(self.pixel_mask).tocsr()
+        self.source_mask[self.sources.phot_g_mean_mag <= magnitude_bright_limit] = 0
         self.source_mask.eliminate_zeros()
         self.uncontaminated_source_mask = self.uncontaminated_source_mask.multiply(
             self.pixel_mask
         ).tocsr()
+        self.uncontaminated_source_mask[
+            self.sources.phot_g_mean_mag <= magnitude_bright_limit
+        ] = 0
         self.uncontaminated_source_mask.eliminate_zeros()
 
-    def _mask_pixels(self, pixel_saturation_limit=1.2e5, magnitude_bright_limit=8):
+    def _mask_pixels(
+        self, pixel_saturation_limit=1.2e5, magnitude_bright_limit=8, **kwargs
+    ):
         """
         Mask saturated pixels and halo/difraction pattern from bright sources.
 
@@ -639,25 +699,18 @@ class FFIMachine(Machine):
             saturation_limit=pixel_saturation_limit
         )
         # tolerance dependens on pixel scale, TESS pixels are 5 times larger than TESS
-        tolerance = 5 if self.meta["MISSION"] == "TESS" else 30
+        tolerance = 6 if self.meta["MISSION"] == "TESS" else 25
         self.non_bright_source_mask = ~self._bright_sources_mask(
             magnitude_limit=magnitude_bright_limit, tolerance=tolerance
         )
         self.pixel_mask = self.non_sat_pixel_mask & self.non_bright_source_mask
 
         if not hasattr(self, "source_mask"):
-            if self.meta["TELESCOP"] == "TESS":
-                self._get_source_mask(
-                    upper_radius_limit=180.0,
-                    lower_radius_limit=5,
-                    upper_flux_limit=5e5,
-                    lower_flux_limit=100,
-                    correct_centroid_offset=False,
-                )
-            else:
-                self._get_source_mask()
+            self._get_source_mask(**kwargs)
         # include saturated pixels in the source mask and uncontaminated mask
-        self._remove_bad_pixels_from_source_mask()
+        self._remove_bad_pixels_from_source_mask(
+            magnitude_bright_limit=magnitude_bright_limit
+        )
 
         return
 
@@ -688,7 +741,13 @@ class FFIMachine(Machine):
         return aux
 
     def build_shape_model(
-        self, plot=False, flux_cut_off=1, frame_index="mean", bin_data=False, **kwargs
+        self,
+        plot=False,
+        flux_cut_off=1,
+        frame_index="mean",
+        bin_data=False,
+        location_dependency=False,
+        **kwargs,
     ):
         """
         Adapted version of `machine.build_shape_model()` that masks out saturated and
@@ -700,6 +759,7 @@ class FFIMachine(Machine):
             flux_cut_off=flux_cut_off,
             frame_index=frame_index,
             bin_data=bin_data,
+            location_dependency=location_dependency,
             **kwargs,
         )
         # include sat/halo pixels again into source_mask
@@ -882,6 +942,8 @@ class FFIMachine(Machine):
         ax.grid(True, which="major", axis="both", ls="-", color="w", alpha=0.7)
         ax.set_xlim(self.column.min() - 2, self.column.max() + 2)
         ax.set_ylim(self.row.min() - 2, self.row.max() + 2)
+        # ax.set_xlim(44, 544)
+        # ax.set_ylim(44, 544)
 
         ax.set_aspect("equal", adjustable="box")
 
@@ -910,14 +972,13 @@ class FFIMachine(Machine):
         ax : matplotlib.axes
             Matlotlib axis with the figure.
         """
-        row_2d, col_2d = np.mgrid[: self.flux_2d.shape[1], : self.flux_2d.shape[2]]
 
         if ax is None:
             fig, ax = plt.subplots(1, figsize=(10, 10))
         if hasattr(self, "non_bright_source_mask"):
             ax.scatter(
-                col_2d.ravel()[~self.non_bright_source_mask],
-                row_2d.ravel()[~self.non_bright_source_mask],
+                self.column[~self.non_bright_source_mask],
+                self.row[~self.non_bright_source_mask],
                 c="y",
                 marker="s",
                 s=1,
@@ -925,8 +986,8 @@ class FFIMachine(Machine):
             )
         if hasattr(self, "non_sat_pixel_mask"):
             ax.scatter(
-                col_2d.ravel()[~self.non_sat_pixel_mask],
-                row_2d.ravel()[~self.non_sat_pixel_mask],
+                self.column[~self.non_sat_pixel_mask],
+                self.row[~self.non_sat_pixel_mask],
                 c="r",
                 marker="s",
                 s=1,
@@ -934,6 +995,8 @@ class FFIMachine(Machine):
             )
         ax.legend(loc="best")
 
+        ax.set_xlim(self.column.min(), self.column.max())
+        ax.set_ylim(self.row.min(), self.row.max())
         ax.set_xlabel("Column Pixel Number")
         ax.set_ylabel("Row Pixel Number")
         ax.set_title("Pixel Mask")
