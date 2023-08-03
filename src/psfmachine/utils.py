@@ -224,6 +224,90 @@ def _make_A_polar(
     return X1
 
 
+def _make_A_polar_quarter(
+    phi,
+    r,
+    cut_r=6,
+    rmin=1,
+    rmax=18,
+    phimin=0,
+    phimax=np.pi / 2,
+    n_r_knots=12,
+    n_phi_knots=15,
+    degree=3,
+):
+    """
+    Creates a design matrix (DM) in polar coordinates (r, phi). It will enforce r-only
+    dependency within `cut_r` radius. This is useful when less data points are available
+    near the center.
+
+    Parameters
+    ----------
+    phi : np.ndarray
+        Array of angle (phi) values in polar coordinates. Must have values in the
+        [-pi, pi] range.
+    r : np.ndarray
+        Array of radii values in polar coordinates.
+    cut_r : float
+        Radius (units consistent with `r`) whitin the DM only has radius dependency
+        and not angle.
+    rmin : float
+        Radius where the DM starts.
+    rmax : float
+        Radius where the DM ends.
+    n_r_knots : int
+        Number of knots used for the spline in radius.
+    n_phi_knots : int
+        Number of knots used for the spline in angle.
+    Returns
+    -------
+    X : sparse CSR matrix
+        A DM with bspline basis in polar coordinates.
+    """
+    # create the spline bases for radius and angle
+    phi_knots = np.linspace(phimin, phimax, n_phi_knots)
+    phi_spline = sparse.csr_matrix(
+        np.asarray(
+            dmatrix(
+                "bs(x, knots=knots, degree=degree, include_intercept=True)",
+                {
+                    "x": list(np.hstack([phi, phimin, phimax])),
+                    "knots": phi_knots,
+                    "degree": degree,
+                },
+            )
+        )
+    )[:-2]
+    r_knots = np.linspace(rmin ** 0.5, rmax ** 0.5, n_r_knots) ** 2
+    cut_r_int = np.where(r_knots <= cut_r)[0].max()
+    r_spline = sparse.csr_matrix(
+        np.asarray(
+            dmatrix(
+                "bs(x, knots=knots, degree=degree, include_intercept=True)",
+                {
+                    "x": list(np.hstack([r, rmin, rmax])),
+                    "knots": r_knots,
+                    "degree": degree,
+                },
+            )
+        )
+    )[:-2]
+
+    # build full desing matrix
+    X = sparse.hstack(
+        [phi_spline.multiply(r_spline[:, idx]) for idx in range(r_spline.shape[1])],
+        format="csr",
+    )
+    # find and remove the angle dependency for all basis for radius < 6
+    cut = np.arange(0, phi_spline.shape[1] * cut_r_int)
+    a = list(set(np.arange(X.shape[1])) - set(cut))
+    X1 = sparse.hstack(
+        [X[:, a], r_spline[:, 1:cut_r_int], sparse.csr_matrix(np.ones(X.shape[0])).T],
+        format="csr",
+    )
+    return X1
+
+
 def spline1d(x, knots, degree=3, include_knots=False):
     """
     Make a bspline design matrix (DM) for 1D variable `x`.
