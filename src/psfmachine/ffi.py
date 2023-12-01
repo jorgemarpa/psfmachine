@@ -59,6 +59,7 @@ class FFIMachine(Machine):
         sparse_dist_lim=40,
         quality_mask=None,
         cadenceno=None,
+        sources_flux_column="phot_g_mean_flux",
         meta=None,
     ):
         """
@@ -139,6 +140,7 @@ class FFIMachine(Machine):
             rmin=rmin,
             rmax=rmax,
             sparse_dist_lim=sparse_dist_lim,
+            sources_flux_column=sources_flux_column,
         )
         # self._mask_pixels()
         if quality_mask is None:
@@ -257,6 +259,20 @@ class FFIMachine(Machine):
         if return_sources:
             return sources
 
+        if metadata["MISSION"] == "TESS":
+            sources_flux_column = "phot_rp_mean_flux"
+            if np.isnan(sources[sources_flux_column].values).any():
+                log.warning(
+                    f"Some sources do not have values in 'gaia.{sources_flux_column}''."
+                    f" Will default to 'gaia.phot_g_mean_flux' for missing values."
+                )
+                sources[sources_flux_column].fillna(
+                    sources["phot_g_mean_flux"], inplace=True
+                )
+        else:
+            sources_flux_column = "phot_g_mean_flux"
+        print(sources_flux_column)
+
         return FFIMachine(
             time.jd,
             flux,
@@ -270,6 +286,7 @@ class FFIMachine(Machine):
             meta=metadata,
             quality_mask=quality_mask,
             cadenceno=cadenceno,
+            sources_flux_column=sources_flux_column,
             **kwargs,
         )
 
@@ -296,7 +313,7 @@ class FFIMachine(Machine):
             [
                 fits.Column(
                     name="psf_w",
-                    array=self.psf_w / np.log10(self.mean_model_integral),
+                    array=self.psf_w,
                     format="D",
                 )
             ]
@@ -330,7 +347,11 @@ class FFIMachine(Machine):
         )
         # spline degree is hardcoded in `_make_A_polar` implementation.
         table.header["spln_deg"] = (3, "Degree of the spline basis")
-        table.header["norm"] = (str(False), "Normalized model")
+        table.header["norm"] = (str(self.normalized_shape_model), "Normalized model")
+        table.header["norm_sum"] = (
+            self.mean_model_integral if self.normalized_shape_model else None,
+            "Normalized factor from PSF integral",
+        )
         table.header["posdep"] = (
             str(self.location_dependency),
             "Is PSF position dependant",
@@ -422,8 +443,10 @@ class FFIMachine(Machine):
         del hdu
 
         if self.location_dependency:
-            self.dra0 = self.source_mask.astype(float).multiply(self.ra - self.ra0)
-            self.ddec0 = self.source_mask.astype(float).multiply(self.dec - self.dec0)
+            # self.dra0 = self.source_mask.astype(float).multiply(self.ra - self.ra0)
+            # self.ddec0 = self.source_mask.astype(float).multiply(self.dec - self.dec0)
+            self.dra0 = self.source_mask.astype(float).multiply(self.column - self.ra0)
+            self.ddec0 = self.source_mask.astype(float).multiply(self.row - self.dec0)
 
             nnz_inds = self.source_mask.nonzero()
             # rho in deg

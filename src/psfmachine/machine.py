@@ -1055,10 +1055,10 @@ class Machine(object):
             if not hasattr(self, "ra0"):
                 self.ra0, self.dec0 = self.ra.mean(), self.dec.mean()
 
-            self.dra0 = self.source_mask.astype(float).multiply(self.ra - self.ra0)
-            self.ddec0 = self.source_mask.astype(float).multiply(self.dec - self.dec0)
-            # self.dra0 = self.source_mask.astype(float).multiply(self.column - self.ra0)
-            # self.ddec0 = self.source_mask.astype(float).multiply(self.row - self.dec0)
+            # self.dra0 = self.source_mask.astype(float).multiply(self.ra - self.ra0)
+            # self.ddec0 = self.source_mask.astype(float).multiply(self.dec - self.dec0)
+            self.dra0 = self.source_mask.astype(float).multiply(self.column - self.ra0)
+            self.ddec0 = self.source_mask.astype(float).multiply(self.row - self.dec0)
 
             nnz_inds = self.source_mask.nonzero()
             # rho in deg
@@ -1078,18 +1078,18 @@ class Machine(object):
             rho_b = self.uncontaminated_source_mask.multiply(self.rho).data
 
             # params when using radec
-            self.rhomin = 2 + 1e-5
-            self.rhomax = 4
-            self.cut_rho = 2.2
-            self.n_rho_knots = 4
-            self.n_theta_knots = 4
-
-            # params when using colrow
-            # self.rhomin = 10 + 1e-4
-            # self.rhomax = 2500
-            # self.cut_rho = 750
+            # self.rhomin = 2 + 1e-5
+            # self.rhomax = 10
+            # self.cut_rho = 2.2
             # self.n_rho_knots = 4
             # self.n_theta_knots = 4
+
+            # params when using colrow
+            self.rhomin = 150 + 1e-4
+            self.rhomax = 2500
+            self.cut_rho = 900
+            self.n_rho_knots = 4
+            self.n_theta_knots = 4
             # self.phimin = np.percentile(theta_b, 3)
             # self.phimax = np.percentile(theta_b, 97)
 
@@ -1104,12 +1104,10 @@ class Machine(object):
                 n_r_knots=self.n_rho_knots,
                 n_phi_knots=self.n_theta_knots,
             )
-            print(A.shape, A0.shape)
             A = sparse.hstack(
                 [A.multiply(A0[:, idx]) for idx in range(A0.shape[1])],
                 format="csr",
             )
-            print(A.shape)
 
         prior_sigma = np.ones(A.shape[1]) * 10
         prior_mu = np.zeros(A.shape[1]) - 10
@@ -1220,13 +1218,10 @@ class Machine(object):
 
         # Recreate uncontaminated mask
         self._get_uncontaminated_pixel_mask()
-        # self.uncontaminated_source_mask = self.uncontaminated_source_mask.multiply(
-        #    (self.mean_model.max(axis=1) < 1)
-        # )
 
         # create the final normalized mean model!
-        self._get_normalized_mean_model()
-        # self._get_mean_model()
+        # self._get_normalized_mean_model()
+        self._get_mean_model()
 
     def _get_mean_model(self):
         """Convenience function to make the scene model"""
@@ -1263,6 +1258,7 @@ class Machine(object):
         mean_model[self.source_mask] = m
         mean_model.eliminate_zeros()
         self.mean_model = mean_model
+        self.mean_model /= np.median(np.array(self.mean_model.sum(axis=1)).ravel())
 
     def _get_normalized_mean_model(self, npoints=300, plot=False):
         """
@@ -1319,7 +1315,7 @@ class Machine(object):
 
         # mask out datapoint that don't contribuite to the psf
         mean_model_hd_ma = mean_model_hd.copy()
-        mask = mean_model_hd > -3
+        mask = mean_model_hd > -4.0
         mean_model_hd_ma[~mask] = -np.inf
         mask &= ~((r_hd > 14) & (np.gradient(mean_model_hd_ma, axis=0) > 0))
         mean_model_hd_ma[~mask] = -np.inf
@@ -1342,8 +1338,8 @@ class Machine(object):
                 phi_hd.ravel(),
                 r_hd.ravel(),
                 c=mean_model_hd_ma.ravel(),
-                vmin=-3,
-                vmax=-1,
+                # vmin=-3,
+                # vmax=-1,
                 s=1,
                 label=r"$\int = $" + f"{self.mean_model_integral:.4f}",
             )
@@ -1351,8 +1347,8 @@ class Machine(object):
                 r_hd.ravel() * np.cos(phi_hd.ravel()),
                 r_hd.ravel() * np.sin(phi_hd.ravel()),
                 c=mean_model_hd_ma.ravel(),
-                vmin=-3,
-                vmax=-1,
+                # vmin=-3,
+                # vmax=-1,
                 s=1,
             )
             ax[0].legend()

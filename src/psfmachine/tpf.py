@@ -3,6 +3,7 @@ import os
 import logging
 import numpy as np
 import lightkurve as lk
+from scipy import sparse
 from astropy.coordinates import SkyCoord, match_coordinates_sky
 from astropy.time import Time
 from astropy.io import fits
@@ -632,7 +633,7 @@ class TPFMachine(Machine):
                 edgecolor="k",
             )
 
-    def load_shape_model(self, input=None, plot=False):
+    def load_shape_model(self, input=None, plot=False, **kwargs):
         """
         Loads a PRF shape model from a FITs file.
         Not implemented: By default this function will load PRF shapes computed from
@@ -690,8 +691,8 @@ class TPFMachine(Machine):
             raise ValueError("File format not suported. Please provide a FITS file.")
 
         # create source mask and uncontaminated pixel mask
-        # if not hasattr(self, "source_mask"):
-        self._get_source_mask()
+        if not hasattr(self, "source_mask"):
+            self._get_source_mask()
 
         # open file
         hdu = fits.open(input)
@@ -702,18 +703,27 @@ class TPFMachine(Machine):
                 % (hdu[1].header["mission"])
                 + " it should be '%s'." % (self.tpf_meta["mission"][0])
             )
-        if hdu[1].header["quarter"] != self.tpf_meta["quarter"][0]:
-            raise ValueError(
-                "Wrong shape model: file is for quarter %i,"
-                % (hdu[1].header["quarter"])
-                + " it should be %i." % (self.tpf_meta["quarter"][0])
-            )
-        if hdu[1].header["channel"] != self.tpf_meta["channel"][0]:
-            raise ValueError(
-                "Wrong shape model: file is for channel %i,"
-                % (hdu[1].header["channel"])
-                + " it should be %i." % (self.tpf_meta["channel"][0])
-            )
+        if self.tpf_meta["mission"][0] == "Kepler":
+            if hdu[1].header["quarter"] != self.tpf_meta["quarter"][0]:
+                raise ValueError(
+                    "Wrong shape model: file is for quarter %i,"
+                    % (hdu[1].header["quarter"])
+                    + " it should be %i." % (self.tpf_meta["quarter"][0])
+                )
+            if hdu[1].header["channel"] != self.tpf_meta["channel"][0]:
+                raise ValueError(
+                    "Wrong shape model: file is for channel %i,"
+                    % (hdu[1].header["channel"])
+                    + " it should be %i." % (self.tpf_meta["channel"][0])
+                )
+        elif self.tpf_meta["mission"][0] == "TESS":
+            channel = f"{self.tpf_meta['camera'][0]}.{self.tpf_meta['ccd'][0]}"
+            if hdu[1].header["CHANNEL"] != channel:
+                raise ValueError(
+                    "Wrong shape model: file is for camera %i,"
+                    % (hdu[1].header["CHANNEL"])
+                    + " it should be %s." % channel
+                )
         # load model hyperparameters and weights
         self.n_r_knots = hdu[1].header["n_rknots"]
         self.n_phi_knots = hdu[1].header["n_pknots"]
@@ -725,13 +735,44 @@ class TPFMachine(Machine):
         self.normalized_shape_model = (
             True if hdu[1].header.get("norm") in ["True", "T", 1] else False
         )
+        self.location_dependency = (
+            True if hdu[1].header.get("posdep") in ["True", "T", 1] else False
+        )
+        self.ra0 = hdu[1].header.get("ra0")
+        self.dec0 = hdu[1].header.get("dec0")
+        self.rhomin = hdu[1].header.get("rhomin")
+        self.rhomax = hdu[1].header.get("rhomax")
+        self.cut_rho = hdu[1].header.get("cut_rho")
+        self.n_rho_knots = hdu[1].header.get("nrhoknt")
+        self.n_theta_knots = hdu[1].header.get("nthetknt")
         del hdu
+
+        if self.location_dependency:
+            # self.dra0 = self.source_mask.astype(float).multiply(self.ra - self.ra0)
+            # self.ddec0 = self.source_mask.astype(float).multiply(self.dec - self.dec0)
+            self.dra0 = self.source_mask.astype(float).multiply(self.column - self.ra0)
+            self.ddec0 = self.source_mask.astype(float).multiply(self.row - self.dec0)
+
+            nnz_inds = self.source_mask.nonzero()
+            # rho in deg
+            rho_vals = np.hypot(self.dra0.data, self.ddec0.data)
+            theta_vals = np.arctan2(self.ddec0.data, self.dra0.data)
+            self.rho = sparse.csr_matrix(
+                (rho_vals, (nnz_inds[0], nnz_inds[1])),
+                shape=self.source_mask.shape,
+                dtype=float,
+            )
+            self.theta = sparse.csr_matrix(
+                (theta_vals, (nnz_inds[0], nnz_inds[1])),
+                shape=self.source_mask.shape,
+                dtype=float,
+            )
 
         # create mean model, but PRF shapes from FFI are in pixels! and TPFMachine
         # work in arcseconds
         self._get_mean_model()
         # remove background pixels and recreate mean model
-        self._update_source_mask_remove_bkg_pixels()
+        self._update_source_mask_remove_bkg_pixels(**kwargs)
 
         if plot:
             return self.plot_shape_model()
@@ -976,6 +1017,9 @@ class TPFMachine(Machine):
             tpf_meta["tpfmag"] = [tpf.get_header()["tessmag"] for tpf in tpfs]
         else:
             raise ValueError("TPFs not understood")
+        tpf_meta["pixel_scale"] = (
+            tpfs[0].wcs.proj_plane_pixel_scales()[0].to("arcsec").value
+        )
 
         if not np.all(
             [
@@ -1061,8 +1105,11 @@ class TPFMachine(Machine):
                 tpf2source.append(
                     np.where(
                         (
-                            (dra < 4 * 3 * u.arcsecond.to(u.deg))
-                            & (ddec < 4 * 3 * u.arcsecond.to(u.deg))
+                            (dra < tpf_meta["pixel_scale"] * 3 * u.arcsecond.to(u.deg))
+                            & (
+                                ddec
+                                < tpf_meta["pixel_scale"] * 3 * u.arcsecond.to(u.deg)
+                            )
                         ).any(axis=1)
                     )[0]
                 )
@@ -1461,11 +1508,14 @@ def _get_coord_and_query_gaia(
         ras.append(r)
         decs.append(d)
     ras, decs = np.hstack(ras), np.hstack(decs)
-    sources, removed_sources = _clean_source_list(sources, ras, decs)
+    pixel_scale = tpfs[0].wcs.proj_plane_pixel_scales()[0].to("arcsec").value
+    sources, removed_sources = _clean_source_list(
+        sources, ras, decs, pixel_scale=pixel_scale
+    )
     return sources
 
 
-def _clean_source_list(sources, ra, dec, pixel_tolerance=4):
+def _clean_source_list(sources, ra, dec, pixel_tolerance=5, pixel_scale=4):
     """
     Removes sources that are too contaminated and/or off the edge of the image
 
@@ -1494,7 +1544,7 @@ def _clean_source_list(sources, ra, dec, pixel_tolerance=4):
     inside = np.zeros(len(sources), dtype=bool)
     # max distance in arcsec from image edge to source ra, dec
     # 4 pixels
-    sep = pixel_tolerance * 4 * u.arcsec.to(u.deg)
+    sep = pixel_tolerance * pixel_scale * u.arcsec.to(u.deg)
     for k in range(len(sources)):
         raok = (sources["ra"][k] > ra - sep) & (sources["ra"][k] < ra + sep)
         decok = (sources["dec"][k] > dec - sep) & (sources["dec"][k] < dec + sep)
