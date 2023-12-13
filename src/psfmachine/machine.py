@@ -372,7 +372,7 @@ class Machine(object):
 
         # Mask out sources that are above the flux limit, and pixels above the
         # radius limit. This is a good estimation only when using phot_g_mean_flux
-        source_rad = 0.5 * np.log10(self.source_flux_estimates) ** 1.5 + 3
+        source_rad = 0.1 * np.log10(self.source_flux_estimates) ** 1.5
         # temp_mask for the sparse array case should also be a sparse matrix. Then it is
         # applied to r, max_flux, and, source_flux_estimates to be used later.
         # Numpy array case:
@@ -486,7 +486,7 @@ class Machine(object):
         ] = lower_radius_limit
 
         # Here we set the radius for each source. We add two pixels, to be generous
-        self.radius = source_radius_limit + 2
+        self.radius = source_radius_limit + 0.2
 
         # This sparse mask is one where where is ANY number of sources in a pixel
         if not isinstance(self.r, sparse.csr_matrix):
@@ -1153,8 +1153,8 @@ class Machine(object):
         # )
 
         # create the final normalized mean model!
-        self._get_normalized_mean_model()
-        # self._get_mean_model()
+        # self._get_normalized_mean_model()
+        self._get_mean_model()
 
     def _get_mean_model(self):
         """Convenience function to make the scene model"""
@@ -1411,7 +1411,7 @@ class Machine(object):
                 dx, dy, mean_f, bins=nbins, abs_thresh=5
             )
 
-        fig, ax = plt.subplots(3, 2, figsize=(9, 10.5), constrained_layout=True)
+        fig, ax = plt.subplots(2, 2, figsize=(9, 7), constrained_layout=True)
         im = ax[0, 0].scatter(
             dx,
             dy,
@@ -1508,43 +1508,43 @@ class Machine(object):
         mean_f = 10 ** mean_f
         model = 10 ** model
 
-        im = ax[2, 0].scatter(
-            dx,
-            dy,
-            c=(model - mean_f) / mean_f,
-            cmap="RdBu",
-            vmin=-1,
-            vmax=1,
-            s=3,
-            rasterized=True,
-        )
-        ax[2, 1].scatter(
-            phi,
-            r,
-            c=(model - mean_f) / mean_f,
-            cmap="RdBu",
-            vmin=-1,
-            vmax=1,
-            s=3,
-            rasterized=True,
-        )
-        ax[2, 0].set_aspect("equal", adjustable="box")
-        ax[2, 0].set(
+        # im = ax[2, 0].scatter(
+        #     dx,
+        #     dy,
+        #     c=(model - mean_f) / mean_f,
+        #     cmap="RdBu",
+        #     vmin=-1,
+        #     vmax=1,
+        #     s=3,
+        #     rasterized=True,
+        # )
+        # ax[2, 1].scatter(
+        #     phi,
+        #     r,
+        #     c=(model - mean_f) / mean_f,
+        #     cmap="RdBu",
+        #     vmin=-1,
+        #     vmax=1,
+        #     s=3,
+        #     rasterized=True,
+        # )
+        # ax[2, 0].set_aspect("equal", adjustable="box")
+        ax[-1, 0].set(
             xlabel=r'$\delta x$ ["]',
             ylabel=r'$\delta y$ ["]',
             title="Residuals",
             xlim=(-radius, radius),
             ylim=(-radius, radius),
         )
-        ax[2, 1].set(
+        ax[-1, 1].set(
             xlabel=r"$\phi$ [$^\circ$]",
             ylabel='$r$ ["]',
             title="Residuals",
             ylim=(0, radius),
             yticks=np.linspace(0, radius, 5, dtype=int),
         )
-        cbar = fig.colorbar(im, ax=ax[2, 1], shrink=0.9, location="right")
-        cbar.set_label("(F$_M$ - F$_D$)/F$_D$")
+        # cbar = fig.colorbar(im, ax=ax[2, 1], shrink=0.9, location="right")
+        # cbar.set_label("(F$_M$ - F$_D$)/F$_D$")
 
         return fig
 
