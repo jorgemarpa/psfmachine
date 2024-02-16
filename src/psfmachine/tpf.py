@@ -174,7 +174,7 @@ class TPFMachine(Machine):
             If True the pixel background level will be zero centered. If False pixels
             will be positive.
         """
-        if not self.tpf_meta["mission"][0].lower() in ["kepler", "k2", "ktwo"]:
+        if self.tpf_meta["mission"][0].lower() not in ["kepler", "k2", "ktwo"]:
             log.warning(
                 "Background fitting is a Kepler only tool, "
                 "then no background model will be fitted."

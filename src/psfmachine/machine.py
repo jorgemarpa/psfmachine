@@ -13,7 +13,6 @@ from astropy.stats import sigma_clip
 
 from .utils import (
     _make_A_polar,
-    _make_A_polar_quarter,
     solve_linear_model,
     sparse_lessthan,
     threshold_bin,
@@ -1766,7 +1765,7 @@ class Machine(object):
             percentile value.
 
         """
-        if type(percentile) == int:
+        if isinstance(percentile, int):
             percentile = [percentile] * self.nsources
         if len(percentile) != self.nsources:
             raise ValueError("Lenght of percentile doesn't match number of sources.")
