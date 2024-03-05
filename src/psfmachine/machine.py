@@ -1411,7 +1411,7 @@ class Machine(object):
                 dx, dy, mean_f, bins=nbins, abs_thresh=5
             )
 
-        fig, ax = plt.subplots(2, 2, figsize=(9, 7), constrained_layout=True)
+        fig, ax = plt.subplots(3, 2, figsize=(9, 10.5), constrained_layout=True)
         im = ax[0, 0].scatter(
             dx,
             dy,
@@ -1508,27 +1508,27 @@ class Machine(object):
         mean_f = 10 ** mean_f
         model = 10 ** model
 
-        # im = ax[2, 0].scatter(
-        #     dx,
-        #     dy,
-        #     c=(model - mean_f) / mean_f,
-        #     cmap="RdBu",
-        #     vmin=-1,
-        #     vmax=1,
-        #     s=3,
-        #     rasterized=True,
-        # )
-        # ax[2, 1].scatter(
-        #     phi,
-        #     r,
-        #     c=(model - mean_f) / mean_f,
-        #     cmap="RdBu",
-        #     vmin=-1,
-        #     vmax=1,
-        #     s=3,
-        #     rasterized=True,
-        # )
-        # ax[2, 0].set_aspect("equal", adjustable="box")
+        im = ax[2, 0].scatter(
+            dx,
+            dy,
+            c=(model - mean_f) / mean_f,
+            cmap="RdBu",
+            vmin=-1,
+            vmax=1,
+            s=3,
+            rasterized=True,
+        )
+        ax[2, 1].scatter(
+            phi,
+            r,
+            c=(model - mean_f) / mean_f,
+            cmap="RdBu",
+            vmin=-1,
+            vmax=1,
+            s=3,
+            rasterized=True,
+        )
+        ax[2, 0].set_aspect("equal", adjustable="box")
         ax[-1, 0].set(
             xlabel=r'$\delta x$ ["]',
             ylabel=r'$\delta y$ ["]',
@@ -1543,8 +1543,8 @@ class Machine(object):
             ylim=(0, radius),
             yticks=np.linspace(0, radius, 5, dtype=int),
         )
-        # cbar = fig.colorbar(im, ax=ax[2, 1], shrink=0.9, location="right")
-        # cbar.set_label("(F$_M$ - F$_D$)/F$_D$")
+        cbar = fig.colorbar(im, ax=ax[2, 1], shrink=0.9, location="right")
+        cbar.set_label("(F$_M$ - F$_D$)/F$_D$")
 
         return fig
 
