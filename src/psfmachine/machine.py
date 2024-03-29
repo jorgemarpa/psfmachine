@@ -1818,6 +1818,8 @@ class Machine(object):
             )
             self.create_aperture_mask(percentile=optimal_percentile)
             self.optimal_percentile = optimal_percentile
+        elif isinstance(aperture_size, np.ndarray) and aperture_size.shape == (self.nsources, self.npixels):
+            self.aperture_mask = aperture_size
         else:
             self.create_aperture_mask(percentile=aperture_size)
 
